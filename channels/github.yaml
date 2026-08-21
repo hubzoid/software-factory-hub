@@ -1,0 +1,24 @@
+version: 1
+# The GitHub connection the factory reads and writes through. `hubzoid channels github connect`
+# fills in app_id, installation_id and repositories, and stores the credentials in the secret store.
+# Apply it with `hubzoid channels apply . --file channels/github.yaml --expected-revision absent`.
+id: github
+provider: github
+enabled: false
+workflow: factory
+run_as: workflow
+allowed_groups: [engineering]
+progress: true
+provider_config:
+  mode: app
+  owner: {type: organization, login: example-org}
+  private_key_ref: secret:channel/software-factory/github/private-key
+  webhook_secret_ref: secret:channel/software-factory/github/webhook-secret
+  rules:
+    mentions: true          # @the-app in a comment by an owner, member or collaborator
+    label: factory          # keep equal to FACTORY_LABEL
+    pr_opened: true         # one orientation comment on each new pull request
+    ci_failure: true        # red checks on a factory branch get at most FACTORY_CI_ATTEMPTS repairs
+    # The route ceiling each trigger asks for. A run can only narrow it.
+    routes: {mention: request, review_mention: request, label: implement, pull_request: summarize,
+             ci_failure: revise}

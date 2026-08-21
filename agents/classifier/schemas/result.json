@@ -1,0 +1,71 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "type": {
+      "description": "The kind of work item.",
+      "enum": [
+        "bug",
+        "feature",
+        "refactor",
+        "question",
+        "chore",
+        "security"
+      ],
+      "type": "string"
+    },
+    "priority": {
+      "description": "How urgent the work is.",
+      "enum": [
+        "critical",
+        "high",
+        "medium",
+        "low"
+      ],
+      "type": "string"
+    },
+    "complexity": {
+      "description": "How big the change looks.",
+      "enum": [
+        "trivial",
+        "small",
+        "medium",
+        "large"
+      ],
+      "type": "string"
+    },
+    "affected_area": {
+      "description": "Best guess at the component, service or layer involved, for example 'frontend/auth', 'API', 'CI pipeline' or 'unknown'.",
+      "type": "string"
+    },
+    "actionable": {
+      "description": "Whether the request has enough information to act on.",
+      "type": "boolean"
+    },
+    "needs_clarification": {
+      "description": "True when the request is ambiguous, contradictory or missing essentials. The questions go in questions.",
+      "type": "boolean"
+    },
+    "questions": {
+      "description": "Specific clarifying questions. Empty unless needs_clarification is true.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "description": "One-sentence restatement of the work item.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "priority",
+    "complexity",
+    "affected_area",
+    "actionable",
+    "needs_clarification",
+    "questions",
+    "summary"
+  ],
+  "type": "object"
+}

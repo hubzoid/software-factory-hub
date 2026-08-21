@@ -1,0 +1,15 @@
+version: 1
+sandbox:
+  enabled: true
+  default_provider: local-docker
+  providers:
+    local-docker:
+      kind: docker
+  limits:
+    max_active_per_hub: 4
+    max_probe_seconds: 120
+  lifecycle_cleanup:
+    terminal_seconds: 0
+  reaper:
+    interval_seconds: 300
+    orphan_grace_seconds: 600

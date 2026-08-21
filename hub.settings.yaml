@@ -1,0 +1,15 @@
+version: 1
+# Setting values for this hub. Synthetic example: replace FACTORY_REPO with your own scratch repository.
+values:
+  FACTORY_REPO: example-org/factory-sample
+  FACTORY_LABEL: factory
+  FACTORY_BRANCH_PREFIX: factory/
+  FACTORY_GITHUB_CONNECTION: github
+  FACTORY_CHANNELS: [chat, mcp, github]
+  FACTORY_INTAKE_ENABLED: true
+  FACTORY_REQUIRE_PLAN_APPROVAL: true
+  FACTORY_REVIEW_CYCLES: 2
+  FACTORY_CI_ATTEMPTS: 2
+  FACTORY_SANDBOX_PROFILE: factory
+  FACTORY_CONCURRENCY: 4
+secrets: {}

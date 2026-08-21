@@ -1,0 +1,14 @@
+version: 1
+# Durable work for the factory workflow.
+work_items:
+  stations:
+    orchestrator_retries: 1   # one clarified retry the workflow may direct (Foreman)
+    recovery_attempts: 1      # one resume after a crash, separate from that retry
+    timeout_seconds: null
+  handoffs:
+    kinds: [research-notes, analysis, evidence]
+    max_characters: 200000
+write_modes:
+  # Every pull request update (title, body, base, close, ready for review) waits
+  # for the person who asked to approve the exact change. Nothing merges.
+  github.pr_update: approve

@@ -1,0 +1,14 @@
+version: 1
+# Slack threads start factory work as the linked person. Rename to slack.yaml and apply it, then follow
+# docs/channels/slack.md in the SDK. Set FACTORY_SLACK_CONNECTION: slack and add slack to FACTORY_CHANNELS.
+id: slack
+provider: slack
+enabled: false
+workflow: factory
+run_as: linked_requester
+allowed_groups: [engineering]
+subscriptions: on_accept
+progress: true
+provider_config:
+  bot_token_ref: secret:channel/software-factory/slack/bot-token
+  signing_secret_ref: secret:channel/software-factory/slack/signing-secret

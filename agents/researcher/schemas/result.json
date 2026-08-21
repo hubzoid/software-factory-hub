@@ -1,0 +1,81 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "summary": {
+      "description": "A one to three sentence synthesis to read first.",
+      "type": "string"
+    },
+    "findings": {
+      "description": "One entry per verified claim.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "description": "One specific factual claim.",
+            "type": "string"
+          },
+          "sources": {
+            "description": "At least one real source that was read. Never empty, never invented.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "url": {
+                  "description": "The URL as visited.",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "url"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "confidence": {
+            "description": "high: several strong independent sources. medium: one solid source. low: weak or thin.",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "type": "string"
+          },
+          "notes": {
+            "description": "Caveats: date sensitivity, scope limits, disagreements between sources.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "sources",
+          "confidence",
+          "notes"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "gaps": {
+      "description": "What could not be found or verified.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "handoff_id": {
+      "description": "The research-notes handoff id, or null.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "summary",
+    "findings",
+    "gaps",
+    "handoff_id"
+  ],
+  "type": "object"
+}

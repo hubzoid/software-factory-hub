@@ -1,0 +1,17 @@
+Software Factory hub for Hubzoid
+Copyright 2026 Hubzoid
+
+Licensed under the Apache License, Version 2.0 (LICENSE).
+
+This hub ports instructions, schemas, skills and behaviour from eve's Software
+Factory template ("Foreman"), Copyright (c) 2026 Vercel, Inc., under the MIT
+License. The full MIT licence text is in LICENSES/MIT-foreman.txt. Ported files
+are listed in ATTRIBUTION.md.
+
+It also follows design patterns (not code) from:
+- LangChain open-swe (MIT): deterministic thread identity, follow-up messages
+  during a run, CI babysitting caps, always ending in a pull request or a
+  clear failure.
+- github/gh-aw (MIT): the agent never holds a write token, deterministic code
+  applies the patch and opens the draft pull request, and the patch is checked
+  before it is published.

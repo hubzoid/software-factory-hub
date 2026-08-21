@@ -1,0 +1,38 @@
+version: 1
+# The Software Factory's own setup checks. `hubzoid hub doctor .` runs them; `hubzoid doctor .` includes them.
+doctor:
+  - id: factory.settings
+    entrypoint: doctor/checks.py:settings
+    timeout_seconds: 10
+    required: true
+  - id: factory.github
+    entrypoint: doctor/checks.py:github
+    timeout_seconds: 20
+    requires: [FACTORY_REPO, FACTORY_GITHUB_CONNECTION]
+    required: true
+  - id: factory.stations
+    entrypoint: doctor/checks.py:stations
+    timeout_seconds: 20
+    required: true
+  - id: factory.sandbox
+    entrypoint: doctor/checks.py:sandbox
+    timeout_seconds: 25
+    requires: [FACTORY_SANDBOX_PROFILE]
+    required: true
+  - id: factory.write_modes
+    entrypoint: doctor/checks.py:write_modes
+    timeout_seconds: 10
+    required: true
+  - id: factory.channels
+    entrypoint: doctor/checks.py:channels
+    timeout_seconds: 10
+    requires: [FACTORY_CHANNELS]
+    required: false
+  - id: factory.runtime
+    entrypoint: doctor/checks.py:runtime
+    timeout_seconds: 15
+    required: false
+  - id: factory.brain
+    entrypoint: doctor/checks.py:brain
+    timeout_seconds: 10
+    required: false

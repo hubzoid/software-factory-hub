@@ -1,0 +1,25 @@
+version: 1
+description: The factory's checkout for analysis, implementation and review. Offline while the agent works.
+image:
+  base: hubzoid-default
+resources:
+  cpus: 2
+  memory_mib: 2048
+  pids: 1024
+lifecycle:
+  idle_stop_seconds: 900
+  max_lifetime_seconds: 21600
+  max_job_seconds: 1800
+  command_timeout_seconds: 300
+network:
+  setup: {mode: allowlist, presets: [registries-v1], allow_hosts: []}
+  agent: {mode: deny_all}
+# The reviewed setup command. It runs once per sandbox, before the agent starts,
+# with only the package registries reachable. A model can never change it.
+# The synthetic sample repository needs nothing beyond Python's standard library.
+setup:
+  command: "python3 -m pip install --quiet --disable-pip-version-check -r requirements-dev.txt || true"
+  cwd: repo
+  timeout_seconds: 900
+env:
+  PYTHONDONTWRITEBYTECODE: "1"

@@ -1,0 +1,68 @@
+version: 1
+# The Software Factory's settings. Values go in hub.settings.yaml.
+# Check them with `hubzoid hub configure . --check` and see them with `hubzoid hub settings .`.
+settings:
+  - name: FACTORY_REPO
+    description: The GitHub repository the factory works on, as owner/name. It must be one of the repositories of the GitHub connection.
+    required: true
+    regex: '^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$'
+    example: example-org/factory-sample
+  - name: FACTORY_LABEL
+    description: The issue label that hands an issue to the factory. Adding it starts unattended work that ends in a draft pull request.
+    default: factory
+    regex: '^[^\s].{0,49}$'
+  - name: FACTORY_BRANCH_PREFIX
+    description: Prefix of every branch the factory creates. Only branches the factory pushed itself get CI repairs.
+    default: factory/
+    regex: '^[A-Za-z0-9][A-Za-z0-9._-]{0,30}/$'
+  - name: FACTORY_BOT_NAME
+    description: The name people mention to ask the factory something on GitHub. Leave empty to use the GitHub App's own name. Token mode needs it set.
+    default: ""
+    regex: '^$|^[A-Za-z0-9][A-Za-z0-9-]{0,38}$'
+  - name: FACTORY_GITHUB_CONNECTION
+    description: The id of the GitHub channel connection (channels/<id>.yaml) the factory reads and writes through.
+    default: github
+    regex: '^[a-z0-9][a-z0-9_-]{0,63}$'
+  - name: FACTORY_LINEAR_CONNECTION
+    description: The id of the Linear channel connection, when Linear is in FACTORY_CHANNELS.
+    default: ""
+    regex: '^$|^[a-z0-9][a-z0-9_-]{0,63}$'
+  - name: FACTORY_SLACK_CONNECTION
+    description: The id of the Slack channel connection, when Slack is in FACTORY_CHANNELS.
+    default: ""
+    regex: '^$|^[a-z0-9][a-z0-9_-]{0,63}$'
+  - name: FACTORY_CHANNELS
+    description: Where people may ask the factory for work. Each enabled channel must pass doctor.
+    type: string_list
+    default: [chat, mcp, github]
+    enum: [chat, mcp, github, linear, slack]
+  - name: FACTORY_INTAKE_ENABLED
+    description: False stops new work. Waiting decisions, recovery and cancellation still work.
+    type: boolean
+    default: true
+  - name: FACTORY_REQUIRE_PLAN_APPROVAL
+    description: True makes attended implementation wait for the requester to approve the exact plan. Unattended label work never waits on a person.
+    type: boolean
+    default: true
+  - name: FACTORY_REVIEW_CYCLES
+    description: How many times the implementer may revise after the reviewer requests changes (0 to 2).
+    type: integer
+    default: 2
+    minimum: 0
+    maximum: 2
+  - name: FACTORY_CI_ATTEMPTS
+    description: How many CI repair attempts the factory makes on a branch it owns before handing over to a person (0 to 2).
+    type: integer
+    default: 2
+    minimum: 0
+    maximum: 2
+  - name: FACTORY_SANDBOX_PROFILE
+    description: The sandbox profile (sandboxes/<id>.yaml) the analyst, implementer and reviewer use. Its setup command installs the repository's dependencies before the agent starts, offline.
+    default: factory
+    regex: '^[a-z0-9][a-z0-9_-]{0,63}$'
+  - name: FACTORY_CONCURRENCY
+    description: How many work items the factory runs at the same time (1 to 16). One writer per branch always.
+    type: integer
+    default: 4
+    minimum: 1
+    maximum: 16

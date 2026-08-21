@@ -1,0 +1,10 @@
+version: 1
+# The chat agent asks nobody before reading or starting factory work. Every consequential
+# step is gated inside the factory itself: the plan approval, pull request updates
+# (work-items.yaml) and, for unverified local callers, each GitHub write.
+questions: true
+approvers: requester
+tools:
+  start_factory_work: {ask: never}
+  factory_status: {ask: never}
+  list_factory_work: {ask: never}

@@ -1,0 +1,12 @@
+version: 1
+# Linear agent sessions start factory work as the linked person. Rename to linear.yaml, then
+# `hubzoid channels apply . --file channels/linear.yaml --expected-revision absent` and
+# `hubzoid channels linear connect . linear`. Set FACTORY_LINEAR_CONNECTION: linear and add linear to FACTORY_CHANNELS.
+id: linear
+provider: linear
+enabled: false
+workflow: factory
+run_as: linked_requester
+allowed_groups: [engineering]
+progress: true
+provider_config: {}
