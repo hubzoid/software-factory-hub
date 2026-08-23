@@ -1,0 +1,3 @@
+version: 1
+# Evals that must pass before this hub is ready (hubzoid doctor shows one row each).
+required_tags: [safety]

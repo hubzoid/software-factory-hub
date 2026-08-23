@@ -80,20 +80,30 @@ class Remote:
                              env=GIT_ENV, capture_output=True, text=True)
         return res.stdout.strip() if res.returncode == 0 else None
 
-    def commit_on(self, ref: str, files: dict[str, str], message: str) -> tuple[str, bytes, str]:
+    def commit_on(self, ref: str, files: dict[str, str], message: str, *, push: bool = False
+                  ) -> tuple[str, bytes, str]:
         """Clone at `ref`, write files, commit: what a sandbox would do. Returns
-        (start commit, format-patch bytes, new head)."""
+        (start commit, format-patch bytes, new head). A content that matches
+        what is there already gets a revision line, so every run changes
+        something. `push` publishes the commit, as a person would."""
         self.n += 1
         work = self.root / f"sandbox-{self.n}"
         subprocess.run(["git", "clone", "--quiet", str(self.bare), str(work)], env=GIT_ENV, check=True)
         start = self.head(ref)
         git(work, "checkout", "--quiet", "--detach", start)
         for path, text in files.items():
-            (work / path).write_text(text)
+            target = work / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists() and target.read_text() == text:
+                text = text + f"# revision {self.n}\n"
+            target.write_text(text)
         git(work, "add", ".")
         git(work, "commit", "--quiet", "-m", message)
         patch = git(work, "format-patch", "--stdout", f"{start}..HEAD").encode()
-        return start, patch, git(work, "rev-parse", "HEAD").strip()
+        head = git(work, "rev-parse", "HEAD").strip()
+        if push:
+            git(work, "push", "--quiet", "--force", str(self.bare), f"HEAD:refs/heads/{ref}")
+        return start, patch, head
 
 
 # -- the GitHub REST API ------------------------------------------------------------------------
@@ -224,6 +234,7 @@ class FakeStations:
                          "affected_surface": ["calc.py"], "risks": [],
                          "acceptance_criteria": ["total([1, 2]) returns 3", "The tests pass"],
                          "test_strategy": "pytest", "assumptions": [], "open_questions": [], "handoff_id": None}
+        self.classifications: list[dict] = []
         self.research = None
         self.verdicts = ["approve"]
         self.changes = [{"calc.py": "def total(xs):\n    return sum(xs)\n"}]
@@ -236,7 +247,7 @@ class FakeStations:
         self.calls.append({"name": name, "message": message, "checkout": definition.get("checkout"),
                            "tools": sorted(registry or {})})
         if name == "classifier":
-            out = dict(self.classification)
+            out = dict(self.classifications.pop(0) if self.classifications else self.classification)
         elif name == "researcher":
             out = self.research
         elif name == "analyst":
@@ -257,7 +268,9 @@ class FakeStations:
         else:
             box = self.boxes[self._box_for(definition)]
             verdict = self.verdicts.pop(0) if len(self.verdicts) > 1 else self.verdicts[0]
-            crit = json.loads(json.dumps(self.analysis["acceptance_criteria"]))
+            # judge exactly the criteria the reviewer was handed, verbatim
+            task = message.split("verbatim:", 1)[-1]
+            crit = [line[2:].strip() for line in task.splitlines() if line.startswith("- ")]
             out = {"verdict": verdict, "reviewed_sha": self.reviewed_override or box["commit"],
                    "criteria_results": [{"criterion": c, "pass": verdict == "approve", "evidence": "ran pytest"}
                                         for c in crit],
@@ -492,13 +505,15 @@ def factory(factory_hub, conn, api, remote, stations_fake, model, people, monkey
     from hubzoid.work_items import service as wi
 
     monkeypatch.setattr(wi, "start", lambda hub_dir, item: item)
-    return Harness(factory_hub, conn, api, remote, stations_fake, model, people)
+    return Harness(factory_hub, conn, api, remote, stations_fake, model, people, monkeypatch)
 
 
 class Harness:
-    def __init__(self, hub_dir, conn, api, remote, stations, model, people):
+    def __init__(self, hub_dir, conn, api, remote, stations, model, people, mp):
         self.hub_dir, self.conn, self.api, self.remote = hub_dir, conn, api, remote
         self.stations, self.model, self.people = stations, model, people
+        self._mp = mp
+        self.steps: dict[str, list] = {}
 
     # starting work the ways people do
     def chat(self, request: str, *, issue: int | None = None, requester: str = OWNER, route: str = "request",
@@ -519,7 +534,8 @@ class Harness:
 
         raw = json.dumps(body).encode()
         sig = "sha256=" + hmac.new(HOOK.encode(), raw, hashlib.sha256).hexdigest()
-        headers = {"x-hub-signature-256": sig, "x-github-delivery": f"{delivery}-0000-0000", "x-github-event": event}
+        hexid = hashlib.sha1(delivery.encode()).hexdigest()[:16]
+        headers = {"x-hub-signature-256": sig, "x-github-delivery": f"{hexid}-0000-0000", "x-github-event": event}
         before = {r["id"] for r in store.list_deliveries(self.hub_dir, "factory", "github")["items"]}
         admission.receive(self.hub_dir, "github", raw, headers, {})
         for row in store.open_deliveries(self.hub_dir, "factory"):
@@ -539,20 +555,43 @@ class Harness:
             "repository": {"id": REPO_ID, "full_name": FULL}, "installation": {"id": 7001},
             "sender": {"id": 501, "login": "ana", "type": "User"}}, delivery)
 
-    def run(self, item: dict) -> dict:
-        """Run the factory workflow body for one item, as the engine would."""
+    def run(self, item: dict, *, fresh_execution: bool = False) -> dict:
+        """Run the factory workflow body for one item, as the engine would:
+        saved steps (stages, station calls, follow-up reads) replay their
+        recorded output in order, and the result is stored on the item."""
         from hubzoid import db
+        from hubzoid.work_items import facade
         from hubzoid.work_items import store as wstore
         from hubzoid.workflows import context
         from hubzoid.workflows.identity import RunIdentity
         from software_factory import pipeline
 
         item = wstore.get_item(self.hub_dir, item["id"])
+        if fresh_execution:
+            self.steps.pop(item["id"], None)
+        recorded = self.steps.setdefault(item["id"], [])
+        position = {"n": 0}
+
+        def step(name, fn):
+            n = position["n"]
+            position["n"] += 1
+            if n < len(recorded):
+                assert recorded[n][0] == name, f"replay diverged at step {n}: {recorded[n][0]} != {name}"
+                return recorded[n][1]
+            value = fn()
+            recorded.append((name, value))
+            return value
+
+        self._mp.setattr(facade, "_step", step)
         ident = RunIdentity("admin@localhost", None, "test", "admin@localhost").to_dict()
         with context.run_scope(hub="factory", workflow="factory", hub_dir=self.hub_dir,
                                engine=db.operational_engine(self.hub_dir), identity=ident, run_id=f"run-{item['id']}",
                                work={"item": item, "stage": None}):
-            return pipeline.run()
+            out = pipeline.run()
+        current = wstore.get_item(self.hub_dir, item["id"])
+        wstore.update_item(self.hub_dir, item["id"], expected_revision=current["revision"], state="completed",
+                           result_json={"result": out})
+        return out
 
     def item(self, item_id: str) -> dict:
         from hubzoid.work_items import store as wstore

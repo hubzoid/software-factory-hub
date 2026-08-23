@@ -108,20 +108,18 @@ def admit(r) -> dict:
     r.repo = github.Repo(**out["repo"])
     pr = out["pr"]
     if out["exhausted"]:
-        github.write("addIssueComment", caller=r.caller, route=r.route, intake=r.intake_number, requester=r.requester,
-                     repository_id=r.repo.repository_id, number=number,
-                     body=f"Pausing automated CI fixes on this pull request to avoid a loop: {cap} attempts have not "
-                          "turned the checks green. A person needs to take it from here.")
-        raise FactoryStop("ci_attempts_exhausted", f"{cap} CI repair attempts did not turn the checks green.")
+        # The pull request is this work's own thread: the stop reply says it once.
+        raise FactoryStop("ci_attempts_exhausted", f"Pausing automated CI fixes on this pull request to avoid a loop: "
+                          f"{cap} attempts have not turned the checks green. A person needs to take it from here.")
     attempt = len(out["attempts"]) + 1
     entry = publish.ledger_get(r.repo.repository_id, pr["branch"]) or {}
     if pr["head_sha"] not in (entry.get("ci_attempts") or []):
         publish.ledger_put(r.repo.repository_id, pr["branch"],
                            dict(entry, ci_attempts=list(entry.get("ci_attempts") or []) + [pr["head_sha"]]))
     broken = ", ".join(j.get("name") or "a check" for j in out["ci_context"].get("jobs") or [])
-    github.write("addIssueComment", caller=r.caller, route=r.route, intake=r.intake_number, requester=r.requester,
-                 repository_id=r.repo.repository_id, number=number,
-                 body=f"CI fix attempt {attempt} of {cap} starting on `{pr['head_sha'][:12]}`. Failing: {broken}.")
+    # Posted before the repair starts, so a run that dies mid-repair still counts.
+    progress.reply(f"CI fix attempt {attempt} of {cap} starting on `{pr['head_sha'][:12]}`. Failing: {broken}.",
+                   key=f"ci-attempt:{pr['head_sha']}", kind="progress")
     r.ground.update(brain=_brain(r), subject={"number": number, "url": pr["url"], "title": pr["title"]},
                     subject_text={"title": pr["title"], "failing_checks": out["ci_context"]})
     r.record.update(repository=r.repo.full_name, branch=pr["branch"], ci_attempt=attempt, failing_head=pr["head_sha"])

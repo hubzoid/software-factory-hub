@@ -94,8 +94,10 @@ def run() -> dict:
 
 def _scope(r: Run) -> None:
     item = hub.work_item
+    # The ceiling is saved with the stage: a resumed execution sees the item
+    # already narrowed, and must still replay the same steps.
     base = item.checkpoint(routes.SCOPE, lambda: {"intake": bool(hub.setting("FACTORY_INTAKE_ENABLED", True)),
-                                                  "fixed": scope.fixed_route(item.route)})
+                                                  "fixed": scope.fixed_route(item.route), "ceiling": item.route})
     if not base["intake"]:
         raise FactoryStop("intake_paused", "The factory is not taking new work right now.")
     if base["fixed"]:
@@ -107,7 +109,7 @@ def _scope(r: Run) -> None:
         decision = hub.call_llm(scope.prompt(r.request), system=scope.SYSTEM, response_model=scope.ScopeDecision)
         decided = scope.check(decision, caller=r.caller, trigger=r.request.trigger).model_dump()
     r.route = decided["route"]
-    if r.route != item.route:
+    if r.route != base["ceiling"]:
         item.narrow(r.route)          # persisted before any station, tool or write
     if decided.get("issue_number") and r.request.subject.kind == "none":
         r.request.subject = intake.Subject(kind="github_issue", number=int(decided["issue_number"]))
@@ -561,10 +563,13 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
         publish.record_pull_request(r.repo.repository_id, branch, pr_number)
     else:
         pr_url = (r.ground.get("subject") or {}).get("url")
-        github.write("addIssueComment", caller=r.caller, route=r.route, intake=r.intake_number,
-                     requester=r.requester, repository_id=r.repo.repository_id, number=pr_number,
-                     body=f"Pushed `{pushed_sha[:12]}` to {branch}. Independent review: {review.verdict}. "
-                          f"{review.summary}")
+        if not progress.thread_available():
+            # Work from chat or the API: tell the pull request what changed. Work
+            # that came from the pull request gets the wrap-up on it instead.
+            github.write("addIssueComment", caller=r.caller, route=r.route, intake=r.intake_number,
+                         requester=r.requester, repository_id=r.repo.repository_id, number=pr_number,
+                         body=f"Pushed `{pushed_sha[:12]}` to {branch}. Independent review: {review.verdict}. "
+                              f"{review.summary}")
     r.record.update(pr_number=pr_number, pr_url=pr_url, evidence_url=ev_url)
     progress.record(pr_number=pr_number, pr_url=pr_url, evidence_url=ev_url)
     note = _brain_note(r, a, impl, review)
@@ -647,6 +652,13 @@ def _act(r: Run) -> dict:
     common = dict(caller=r.caller, route=r.route, intake=r.intake_number, requester=r.requester,
                   repository_id=r.repo.repository_id, number=act.number)
     op = act.operation
+    if op == "create_issue":
+        common.pop("number")
+        out = github.write("createIssue", **common, title=(act.title or "Untitled")[:200], body=act.body or "",
+                           **({"labels": act.labels[:10]} if act.labels else {}))["data"]
+        text = f"Opened #{out.get('number')}: {out.get('html_url') or act.title}."
+        progress.stage(routes.ACT, text, post=False)
+        return _done(r, "acted", text)
     if op == "mark_ready":
         progress.reply(f"Marking #{act.number} ready waits for your approval in Hubzoid (Work items).",
                        key="act-wait", kind="question")

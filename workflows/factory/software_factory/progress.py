@@ -8,6 +8,7 @@ the factory's record, which the chat tools and the Console read.
 """
 from __future__ import annotations
 
+import hashlib
 import time
 
 from hubzoid import hub
@@ -41,7 +42,9 @@ def stage(name: str, note: str, *, post: bool = True) -> None:
         stages.append({"stage": name, "note": note, "at": time.time()})
     record(stage=name, stages=stages)
     if post and thread_available():
-        hub.thread.post(note, key=f"progress:{name}:{len(stages)}", kind="progress")
+        # Keyed by content, so a replay or a recovery never posts the note twice.
+        digest = hashlib.sha256(note.encode()).hexdigest()[:12]
+        hub.thread.post(note, key=f"progress:{name}:{digest}", kind="progress")
 
 
 def reply(text: str, *, key: str, kind: str = "result") -> bool:

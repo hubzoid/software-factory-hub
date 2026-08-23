@@ -47,14 +47,17 @@ class Published:
 
 
 def branch_name(prefix: str, *, kind: str, summary: str, number: int | None, item_id: str) -> str:
-    """`factory/12-bug-fix-the-total` for an issue, `factory/bug-fix-the-total-1a2b3c` otherwise.
-    Decided by code from the saved classification, never by a model."""
+    """`factory/12-bug-fix-the-total-1a2b3c` for an issue, `factory/bug-fix-the-total-1a2b3c` otherwise.
+    Decided by code from the saved classification, never by a model. The work
+    item's short id keeps a new request for the same issue (a re-label after a
+    stopped run) off the earlier work's branch."""
     slug = re.sub(r"[^a-z0-9]+", "-", (summary or "change").lower()).strip("-")
     slug = "-".join(slug.split("-")[:6])[:40].strip("-") or "change"
     kind = re.sub(r"[^a-z]", "", kind or "change") or "change"
+    short = item_id.replace("-", "")[:6]
     if number:
-        return f"{prefix}{number}-{kind}-{slug}"
-    return f"{prefix}{kind}-{slug}-{item_id.replace('-', '')[:6]}"
+        return f"{prefix}{number}-{kind}-{slug}-{short}"
+    return f"{prefix}{kind}-{slug}-{short}"
 
 
 def ledger_get(repository_id: int, branch: str) -> dict | None:
