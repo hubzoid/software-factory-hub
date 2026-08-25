@@ -1,0 +1,7 @@
+[
+  {"name": "bug", "color": "d73a4a", "description": "Something is not working"},
+  {"name": "enhancement", "color": "a2eeef", "description": "New feature or request"},
+  {"name": "documentation", "color": "0075ca", "description": "Improvements or additions to documentation"},
+  {"name": "area:invoice", "color": "c5def5", "description": "The invoice totals module"},
+  {"name": "factory", "color": "5319e7", "description": "Hand this issue to the Software Factory"}
+]

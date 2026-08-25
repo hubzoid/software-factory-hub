@@ -18,7 +18,7 @@ network:
 # with only the package registries reachable. A model can never change it.
 # The synthetic sample repository needs nothing beyond Python's standard library.
 setup:
-  command: "python3 -m pip install --quiet --disable-pip-version-check -r requirements-dev.txt || true"
+  command: "python3 -m pip install --quiet --disable-pip-version-check -r requirements-dev.txt"
   cwd: repo
   timeout_seconds: 900
 env:

@@ -1,0 +1,11 @@
+[
+  {"title": "Invoice total is off by a cent for some baskets",
+   "body": "Synthetic sample issue.\n\nA basket of three items at 0.10 each with 5% tax charges 0.33. The tax on 0.30 is 0.015, so the total should be 0.32. It looks like each line is rounded on its own before the lines are added up.\n\nThe failing test `tests/test_totals.py::test_total_rounds_once_not_per_line` shows it.",
+   "labels": ["bug", "area:invoice"]},
+  {"title": "Add a short Reporting bugs section to the README",
+   "body": "Synthetic sample issue.\n\nAdd a short \"Reporting bugs\" section to README.md asking reporters for the version they use and steps to reproduce.",
+   "labels": ["documentation"]},
+  {"title": "Discount over 100 percent gives a confusing error",
+   "body": "Synthetic sample issue.\n\nWhen a discount above 100 is passed, the error says \"percent must be between 0 and 100\" but does not say which value was passed. Could the message include the value?",
+   "labels": ["enhancement", "area:invoice"]}
+]
