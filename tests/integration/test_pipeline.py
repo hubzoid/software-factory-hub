@@ -320,3 +320,30 @@ def test_brain_note_proposed_for_attended_and_suggested_for_unattended(factory, 
         "files" in pending[0] else True
     unattended = factory.run(factory.label(delivery="d-label-2"))
     assert "Suggested factory brain note: Run the tests" in unattended["reply"]
+
+
+def test_writes_and_pushes_stay_on_the_factory_repository(factory):
+    """Chat work has no GitHub coordinates, so the SDK would take any repository
+    of the connection: the factory refuses every other one."""
+    from hubzoid.channels import config
+    from software_factory import github
+
+    cfg = config.export(factory.hub_dir, "github")["config"]
+    cfg["provider_config"]["repositories"].append({"id": 3003, "full_name": "example-co/other"})
+    v = config.load_text(factory.hub_dir, config.render(cfg))
+    config.apply(factory.hub_dir, v.data, expected_revision=1, actor="test")
+    item = factory.chat("Fix total", issue=12)
+    from hubzoid import db
+    from hubzoid.workflows import context
+
+    with context.run_scope(hub="factory", workflow="factory", hub_dir=factory.hub_dir,
+                           engine=db.operational_engine(factory.hub_dir), run_id="r",
+                           work={"item": item, "stage": None}):
+        with pytest.raises(github.FactoryRefused) as exc:
+            github.write("addIssueComment", caller="T", route="implement", intake=None, requester=h.OWNER,
+                         repository_id=3003, number=1, body="hi")
+        assert exc.value.code == "repository_unavailable"
+        with pytest.raises(github.FactoryRefused):
+            github.push(repository_id=3003, branch="factory/x", patch=b"x", patch_sha256="sha256:0",
+                        base_sha="a" * 40, expected_head=None, base_branch="main")
+    assert not factory.writes()

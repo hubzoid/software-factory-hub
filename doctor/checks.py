@@ -90,7 +90,9 @@ def github(context) -> dict:
     if not conn.config.enabled:
         notes.append("paused (enabled: false), so GitHub events are recorded but start nothing")
     if cfg.mode == "pat":
-        notes.append("local token mode: replies use your own GitHub account and webhooks are not verified")
+        notes.append("local token mode: replies use your own GitHub account, pushes use your whole personal token "
+                     "(not narrowed to one repository, so use a fine-grained token limited to it), and webhooks "
+                     "are not verified")
         if not s.get("FACTORY_BOT_NAME"):
             notes.append("token mode needs FACTORY_BOT_NAME set for mentions")
     if problems:

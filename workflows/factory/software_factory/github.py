@@ -49,6 +49,24 @@ def _hub_dir():
     return context._ctx().hub_dir
 
 
+def configured_repository_id() -> int:
+    """FACTORY_REPO's numeric id in the connection. Work from chat, the API,
+    Slack or Linear has no GitHub coordinates, so the SDK would accept any
+    repository of the connection: the factory itself allows only this one."""
+    conn = connection()
+    wanted = (hub.setting("FACTORY_REPO") or "").lower()
+    match = next((r for r in conn.settings.repositories or [] if r.full_name.lower() == wanted), None)
+    if match is None:
+        raise FactoryRefused("repository_unavailable", f"{wanted or 'FACTORY_REPO'} is not one of the connection's "
+                             "repositories.")
+    return int(match.id)
+
+
+def _only_factory_repo(repository_id) -> None:
+    if repository_id != configured_repository_id():
+        raise FactoryRefused("repository_unavailable", "The factory writes only to FACTORY_REPO.")
+
+
 def repo() -> Repo:
     """The configured repository, looked up through the connection by name,
     then always used by its numeric id."""
@@ -81,6 +99,7 @@ def write(name: str, *, caller: str, route: str, intake: int | None, requester: 
     request update, which the SDK also gates by its exact digest)."""
     from hubzoid.channels.github import operations
 
+    _only_factory_repo(arguments.get("repository_id"))
     verdict = policy.decide(caller, name, number=arguments.get("number"), intake=intake, route=route,
                             arguments=arguments)
     if verdict.decision == "deny":
@@ -99,6 +118,7 @@ def push(*, repository_id: int, branch: str, patch: bytes, patch_sha256: str, ba
          expected_head: str | None, base_branch: str, key: str | None = None) -> dict:
     from hubzoid.channels.github import operations
 
+    _only_factory_repo(repository_id)
     return operations.push_branch(connection(), repository_id=repository_id, branch=branch, patch=patch,
                                   patch_sha256=patch_sha256, base_sha=base_sha, expected_head=expected_head,
                                   base_branch=base_branch, key=key)

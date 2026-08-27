@@ -64,7 +64,9 @@ def _int(v) -> int | None:
 
 
 def _clip(text: str | None) -> str:
-    text = (text or "").strip()
+    from .sanitize import clean
+
+    text = clean((text or "").strip())
     return text[:MAX_TEXT]
 
 

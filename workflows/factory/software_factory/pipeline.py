@@ -28,7 +28,7 @@ from pathlib import Path
 from hubzoid import hub
 from pydantic import BaseModel, Field
 
-from . import brain, evidence, github, intake, policy, progress, publish, routes, scope, stations
+from . import brain, evidence, github, intake, policy, progress, publish, routes, sanitize, scope, stations
 from .errors import FactoryStop
 from .schemas import Analysis, Classification, Implementation, Research, Review
 
@@ -171,6 +171,8 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
                                    "omissions": ctx.get("omissions")}
         if req.data.get("linear_context"):
             out["channel_context"] = req.data["linear_context"]
+        out["subject_text"] = sanitize.deep(out["subject_text"])
+        out["channel_context"] = sanitize.deep(out.get("channel_context"))
         labels = github.read("listLabels", repository_id=repo.repository_id, page_size=100)["data"]
         out["labels"] = [{"name": l.get("name"), "description": l.get("description")} for l in labels]
         out["brain"] = brain.for_station(_hub_dir(), repo.full_name)
