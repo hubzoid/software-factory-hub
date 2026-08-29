@@ -1,0 +1,48 @@
+name: factory
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"        # nightly against the SDK branch
+permissions:
+  contents: read
+jobs:
+  scripted:
+    name: tests (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [unit, integration]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Hubzoid (the SDK branch this hub builds on)
+        run: python -m pip install "hubzoid @ git+https://github.com/hubzoid/hubzoid@rh/software-factory-github-push" pytest
+      - name: Unit tests (routes, policy, schemas, settings, patch check, intake, scope)
+        if: matrix.suite == 'unit'
+        run: python -m pytest -q tests --ignore=tests/integration --junitxml=output/unit.xml
+      - name: Pipeline tests (work items, stations, operations, channels, push; GitHub and models scripted)
+        if: matrix.suite == 'integration'
+        run: python -m pytest -q tests/integration --junitxml=output/integration.xml
+      - name: Schemas match the station result models
+        if: matrix.suite == 'unit'
+        run: |
+          cd workflows/factory && python -m software_factory.schemas --write && git diff --exit-code
+      - name: Evals parse
+        if: matrix.suite == 'unit'
+        run: hubzoid eval list .
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: junit-${{ matrix.suite }}
+          path: output/*.xml
+  real:
+    # Real model and real provider qualification needs a provisioned login and a scratch
+    # repository, so it runs only when a maintainer starts it with those secrets in place.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Run the real journey from a machine with Claude Code or Codex signed in. See docs/evals.md."
