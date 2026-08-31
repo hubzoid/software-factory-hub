@@ -34,7 +34,10 @@ Codes from Hubzoid itself:
 | `retry_exhausted` | A station failed twice. Check the call with `hubzoid stations calls show`, fix the cause, restart the work |
 | `definition_changed` | Code changed while the work waited. Check, then `hubzoid work-items restart` |
 | `pr_update_requires_approval` | Set `github.pr_update: approve` in `work-items.yaml` |
-| Ambiguous operation | A write may or may not have happened. The requester decides done, retry or abandon in Work items. An empty search is not proof |
+| Ambiguous operation | A write may or may not have happened. The requester decides done, retry or abandon in Work items. An empty search is not proof. An interrupted pull request creation settles itself by finding the pull request for its branch |
+| Ambiguous operation in unattended work | Label and CI work has no person to decide. A manager cancels it (`hubzoid work-items cancel . ITEM`) and checks GitHub. Nothing is resent on its own |
+| `review_evidence_invalid` | The reviewer left changed files, so its checks don't prove the published commit. Ask again |
+| `pull_request_unconfirmed` | An uncertain creation was settled as done, but no pull request for the reviewed commit exists. Open it from the branch or ask again |
 | `pat_remote_forbidden` | Token mode is for a laptop. Use a GitHub App for a hosted hub |
 | `signature_invalid` | The webhook secret does not match the App's |
 

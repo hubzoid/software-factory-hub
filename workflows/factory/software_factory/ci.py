@@ -28,14 +28,49 @@ class Quiet(FactoryStop):
     """Nothing to do and nothing to say (green checks, a stale head, a duplicate)."""
 
 
+ATTEMPT = "factory_v1:ci:{rid}:{branch}:{n}"
+
+
+def attempts(repository_id: int, branch: str, cap: int) -> list[str]:
+    """The failing heads that already used a repair attempt on this branch.
+    Each attempt is its own write-once key, so no other writer's update of
+    the branch ledger can erase one, and a new head never resets the count."""
+    out = []
+    for n in range(1, cap + 2):
+        head = hub.shared_state.get(ATTEMPT.format(rid=repository_id, branch=branch, n=n))
+        if not head:
+            break
+        out.append(head)
+    return out
+
+
+def reserve(repository_id: int, branch: str, head: str, cap: int) -> int | None:
+    """This failing head's attempt number, reserving the next slot once.
+    None when the cap is used up. CI work on one pull request runs one at a
+    time (one active work item per thread), so slots are not contended."""
+    used = attempts(repository_id, branch, cap)
+    if head in used:
+        return used.index(head) + 1
+    if len(used) >= cap:
+        return None
+    hub.shared_state[ATTEMPT.format(rid=repository_id, branch=branch, n=len(used) + 1)] = head
+    return len(used) + 1
+
+
 def _prior(owner_item: str) -> dict:
-    """The classification and plan of the work that created the branch."""
+    """The classification and plan of the work that created the branch, with
+    its analysis handoff copied into this work item."""
     from hubzoid.work_items import store as wi_store
     from hubzoid.workflows import context
 
+    from .pipeline import carry_handoff
+
     item = wi_store.get_item(context._ctx().hub_dir, owner_item) if owner_item else None
     result = (((item or {}).get("result_json") or {}).get("result") or {}).get("factory_v1") or {}
-    return {"classification": result.get("classification"), "analysis": result.get("analysis")}
+    analysis = dict(result["analysis"]) if result.get("analysis") else None
+    if analysis:
+        analysis["handoff_id"] = carry_handoff(owner_item, analysis.get("handoff_id"))
+    return {"classification": result.get("classification"), "analysis": analysis}
 
 
 def _fallback(branch: str) -> dict:
@@ -65,7 +100,7 @@ def _pr(repo, number: int) -> dict:
 def admit(r) -> dict:
     data = r.request.data
     number = r.request.subject.number
-    cap = int(hub.setting("FACTORY_CI_ATTEMPTS", 2))
+    cap = r.settings["FACTORY_CI_ATTEMPTS"]
 
     def check() -> dict:
         repo = github.repo()
@@ -87,8 +122,8 @@ def admit(r) -> dict:
                               number=number)["data"]
         if not failing.get("jobs"):
             return {"quiet": "ci_not_failing"}
-        attempts = list(entry.get("ci_attempts") or [])
-        if pr["head_sha"] in attempts:
+        used = attempts(repo.repository_id, pr["branch"], cap)
+        if pr["head_sha"] in used:
             return {"quiet": "duplicate_failure"}
         prior = _prior(entry.get("owner_item"))
         if not prior.get("analysis"):
@@ -96,9 +131,9 @@ def admit(r) -> dict:
         analysis = dict(prior["analysis"])
         analysis["acceptance_criteria"] = list(analysis.get("acceptance_criteria") or []) + [
             "The checks that failed at the previous head pass, without weakening or skipping them."]
-        return {"repo": repo.__dict__, "pr": pr, "attempts": attempts, "exhausted": len(attempts) >= cap,
+        return {"repo": repo.__dict__, "pr": pr, "attempts": used, "exhausted": len(used) >= cap,
                 "owner_item": entry.get("owner_item"), "ci_context": failing,
-                "classification": prior["classification"], "analysis": analysis}
+                "classification": prior["classification"], "analysis": analysis, "brain": _brain_of(repo)}
 
     out = hub.work_item.checkpoint(routes.CI_CHECK, check)
     if out.get("quiet"):
@@ -111,16 +146,14 @@ def admit(r) -> dict:
         # The pull request is this work's own thread: the stop reply says it once.
         raise FactoryStop("ci_attempts_exhausted", f"Pausing automated CI fixes on this pull request to avoid a loop: "
                           f"{cap} attempts have not turned the checks green. A person needs to take it from here.")
-    attempt = len(out["attempts"]) + 1
-    entry = publish.ledger_get(r.repo.repository_id, pr["branch"]) or {}
-    if pr["head_sha"] not in (entry.get("ci_attempts") or []):
-        publish.ledger_put(r.repo.repository_id, pr["branch"],
-                           dict(entry, ci_attempts=list(entry.get("ci_attempts") or []) + [pr["head_sha"]]))
+    attempt = reserve(r.repo.repository_id, pr["branch"], pr["head_sha"], cap)
+    if attempt is None:
+        raise FactoryStop("ci_attempts_exhausted", f"{cap} CI repair attempts did not turn the checks green.")
     broken = ", ".join(j.get("name") or "a check" for j in out["ci_context"].get("jobs") or [])
     # Posted before the repair starts, so a run that dies mid-repair still counts.
     progress.reply(f"CI fix attempt {attempt} of {cap} starting on `{pr['head_sha'][:12]}`. Failing: {broken}.",
                    key=f"ci-attempt:{pr['head_sha']}", kind="progress")
-    r.ground.update(brain=_brain(r), subject={"number": number, "url": pr["url"], "title": pr["title"]},
+    r.ground.update(brain=out["brain"], subject={"number": number, "url": pr["url"], "title": pr["title"]},
                     subject_text={"title": pr["title"], "failing_checks": out["ci_context"]})
     r.record.update(repository=r.repo.full_name, branch=pr["branch"], ci_attempt=attempt, failing_head=pr["head_sha"])
     progress.record(branch=pr["branch"], ci_attempt=attempt)
@@ -150,7 +183,7 @@ def admit_attended(r) -> dict:
         if not prior.get("analysis"):
             prior = _fallback(pr["branch"])
         return {"repo": repo.__dict__, "pr": pr, "owner_item": entry.get("owner_item"),
-                "classification": prior["classification"], "analysis": prior["analysis"]}
+                "classification": prior["classification"], "analysis": prior["analysis"], "brain": _brain_of(repo)}
 
     out = hub.work_item.checkpoint(routes.CI_CHECK, check)
     if out.get("stop"):
@@ -161,7 +194,7 @@ def admit_attended(r) -> dict:
     if r.request.data.get("path"):
         where = f" (on {r.request.data['path']}" + (f" line {r.request.data['line']}" if r.request.data.get(
             "line") else "") + ")"
-    r.ground.update(brain=_brain(r), subject={"number": number, "url": pr["url"], "title": pr["title"]},
+    r.ground.update(brain=out["brain"], subject={"number": number, "url": pr["url"], "title": pr["title"]},
                     subject_text={"title": pr["title"]})
     r.record.update(repository=r.repo.full_name, branch=pr["branch"])
     return {"branch": pr["branch"], "head_sha": pr["head_sha"], "owner_item": out["owner_item"],
@@ -170,11 +203,12 @@ def admit_attended(r) -> dict:
             "findings": [f"The requester asked{where}: {r.request.instruction}"]}
 
 
-def _brain(r) -> str:
+def _brain_of(repo) -> str:
+    """Read inside the saved admission stage, so a replay sees the same brain."""
     from pathlib import Path
 
     from hubzoid.workflows import context
 
     from . import brain
 
-    return brain.for_station(Path(context._ctx().hub_dir), r.repo.full_name)
+    return brain.for_station(Path(context._ctx().hub_dir), repo.full_name)

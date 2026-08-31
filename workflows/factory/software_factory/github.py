@@ -124,6 +124,18 @@ def push(*, repository_id: int, branch: str, patch: bytes, patch_sha256: str, ba
                                   base_branch=base_branch, key=key)
 
 
+def find_pull_request(branch: str) -> dict | None:
+    """The pull request whose head is `branch` in FACTORY_REPO, if any."""
+    from hubzoid.channels.github import client as gh
+    from hubzoid.channels.github import operations
+
+    conn = connection()
+    rid = configured_repository_id()
+    web = gh.for_repo(conn, rid, gh.READ)
+    found = operations.find_pull_request(conn, web, gh.current_name(conn, web, rid), branch)
+    return {k: found.get(k) for k in ("number", "html_url", "draft", "head")} if found else None
+
+
 def branch_head(repository_id: int, branch: str) -> str | None:
     """The branch's current head on GitHub, or None when it doesn't exist."""
     from urllib.parse import quote

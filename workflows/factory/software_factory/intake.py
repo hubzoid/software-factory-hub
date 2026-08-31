@@ -50,6 +50,7 @@ class Request:
     delivery_id: str | None = None
     from_work_item: str | None = None   # "implement the plan from work X"
     route_hint: str | None = None       # what an API caller or chat tool asked for
+    require_plan_approval: bool = False  # an API caller asked to approve the plan, whatever the default
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -134,7 +135,8 @@ def _from_direct(p: dict) -> Request:
     route = p.get("route") if isinstance(p.get("route"), str) else None
     return Request(source=source, trigger=source, instruction=_clip(p.get("request") or p.get("text")),
                    subject=subject, from_work_item=p.get("from_work_item") if isinstance(
-                       p.get("from_work_item"), str) else None, route_hint=route)
+                       p.get("from_work_item"), str) else None, route_hint=route,
+                   require_plan_approval=p.get("require_plan_approval") is True)
 
 
 def unattended(requester: str) -> bool:

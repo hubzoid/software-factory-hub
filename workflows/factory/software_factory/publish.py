@@ -103,13 +103,22 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
     if not checked.ok:
         raise FactoryStop("patch_refused", "The change was not published: " + "; ".join(checked.refusals),
                           details=checked.to_json())
+    from hubzoid.channels.github import operations
+
     entry = ledger_get(repo.repository_id, branch)
-    if expected_head is None:
+    key = f"r{revision}"
+    replay = operations.recorded("github.pushBranch", {"repository_id": repo.repository_id, "branch": branch},
+                                 key) is not None
+    if replay:
+        # This exact push was already recorded (the process stopped before the
+        # stage was saved): the SDK settles it from its record, with the same
+        # arguments. The ledger may already show its result, so it is not
+        # checked again.
+        pass
+    elif expected_head is None:
         if entry is not None and entry.get("owner_item") != owner_item:
             raise FactoryStop("branch_owned_elsewhere", f"{branch} belongs to other factory work "
                               f"({str(entry.get('owner_item'))[:8]}).")
-        if entry is not None and entry.get("pushed_sha") and entry.get("owner_item") == owner_item:
-            expected_head = entry["pushed_sha"]          # a replay after the push was recorded
     else:
         if entry is None or entry.get("pushed_sha") != expected_head:
             raise FactoryStop("stale_head", f"{branch} is not where the factory left it. A person must look "
@@ -120,7 +129,7 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
     try:
         out = github.push(repository_id=repo.repository_id, branch=branch, patch=data, patch_sha256=digest,
                           base_sha=base_sha, expected_head=expected_head, base_branch=repo.default_branch,
-                          key=f"r{revision}")
+                          key=key)
     except Exception as exc:  # noqa: BLE001 - the SDK's codes become the factory's stop reasons
         code = getattr(exc, "code", None)
         if code in ("branch_exists", "stale_head", "branch_protected", "default_branch_refused", "patch_changed",
@@ -128,10 +137,12 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
             raise FactoryStop(code if code != "operation_rejected" else "push_rejected",
                               getattr(exc, "message", str(exc))) from None
         raise
-    entry = dict(entry or {}, owner_item=(entry or {}).get("owner_item") or owner_item, branch=branch,
-                 repository_id=repo.repository_id, base_branch=repo.default_branch, pushed_sha=out["head_sha"],
-                 last_item=hub.work_item.id, ci_attempts=(entry or {}).get("ci_attempts") or [])
-    ledger_put(repo.repository_id, branch, entry)
+    # Read again just before writing, and change only this push's fields.
+    latest = ledger_get(repo.repository_id, branch) or {}
+    ledger_put(repo.repository_id, branch, dict(latest, owner_item=latest.get("owner_item") or owner_item,
+                                                branch=branch, repository_id=repo.repository_id,
+                                                base_branch=repo.default_branch, pushed_sha=out["head_sha"],
+                                                last_item=hub.work_item.id))
     return Published(branch=branch, pushed_sha=out["head_sha"], previous_head=out.get("previous_head"),
                      base_sha=out.get("base_sha") or base_sha, commits=out.get("commits") or checked.commits,
                      html_url=out.get("html_url") or "", scan=checked.to_json())

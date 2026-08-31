@@ -63,17 +63,14 @@ def test_duplicate_ci_single_reservation(factory):
     second = red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="ci-b", suite=2)
     assert second.get("id") in (None, first["id"])                    # one work item per failing head
     factory.run(first)
-    from software_factory import publish
+    from software_factory import ci
 
-    from hubzoid.workflows import context  # noqa: F401
-    entry = None
-    import json
     from hubzoid import db
     from hubzoid.workflows.state import SHARED, WorkflowState
 
     state = WorkflowState(db.operational_engine(factory.hub_dir), "factory", "factory", owner=SHARED)
-    entry = state.get(publish.LEDGER.format(rid=h.REPO_ID, branch=rec["branch"]))
-    assert entry["ci_attempts"] == [rec["pushed_sha"]], json.dumps(entry)
+    slots = [state.get(ci.ATTEMPT.format(rid=h.REPO_ID, branch=rec["branch"], n=n)) for n in (1, 2)]
+    assert slots == [rec["pushed_sha"], None]
 
 
 def test_branch_prefix_not_ownership(factory):

@@ -59,8 +59,13 @@ def propose_note(hub_dir: Path, full_name: str, note: str, *, requester: str, wo
             {"path": rel, "content": f"---\nname: factory-brain-{rel.rsplit('/', 1)[1][:-3]}\n"
                                     f"description: Durable facts about {full_name} that the factory and its "
                                     f"reviewers should know.\n---\n# Factory brain: {full_name}\n\n- {note}\n"})
+    title = f"Factory brain: {note[:80]}"
+    reason = f"Suggested by factory work {work_item}."
+    for pending in service.list_(Path(hub_dir), status="pending"):
+        if pending.get("title") == title and pending.get("reason") == reason:
+            return pending                     # proposed already (a replay)
     try:
-        return service.propose(Path(hub_dir), title=f"Factory brain: {note[:80]}", edits=[edit], actor=requester,
-                               via="workflow", reason=f"Suggested by factory work {work_item}.", present=False)
+        return service.propose(Path(hub_dir), title=title, edits=[edit], actor=requester, via="workflow",
+                               reason=reason, present=False)
     except service.ChangeError:
         return None

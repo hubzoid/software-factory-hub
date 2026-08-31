@@ -36,3 +36,23 @@ def test_symlinks_paths_and_size():
     assert not scan.check(b"").ok
     many = b"".join(patch(f"f{i}.py") for i in range(scan.MAX_FILES + 1))
     assert not scan.check(many).ok
+
+
+def test_quoted_paths_cannot_hide_a_workflow_change():
+    """A rename from a name with a tab is a C-quoted header: still checked."""
+    quoted = (b'From abc Mon Sep 17 00:00:00 2001\nSubject: [PATCH] mv\n\n---\n'
+              b'diff --git "a/we\\tird" b/.github/workflows/ci.yml\nsimilarity index 100%\n'
+              b'rename from "we\\tird"\nrename to .github/workflows/ci.yml\n')
+    out = scan.check(quoted)
+    assert not out.ok and ".github/workflows/ci.yml" in out.files
+    assert any("never changed" in r for r in out.refusals)
+
+
+def test_octal_quoted_names_are_decoded():
+    path = scan._unquote('"caf\\303\\251.py"')
+    assert path == "café.py"
+
+
+def test_unreadable_patches_are_refused():
+    assert not scan.check(b"diff --git broken header\n+x\n").ok
+    assert not scan.check(b"not a patch at all\n").ok

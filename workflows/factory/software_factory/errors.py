@@ -37,6 +37,10 @@ REASONS = {
     "repository_unavailable": "Check the repository setting and the GitHub App installation.",
     "stopped_by_requester": "Stopped as asked.",
     "content_too_large": "The request or a document is larger than the factory accepts.",
+    "review_evidence_invalid": "The reviewer changed files while checking, so its result does not prove the "
+                               "published commit. Ask again.",
+    "pull_request_unconfirmed": "Check GitHub for a pull request from the branch. If there is none, open one from "
+                                "the branch or ask again.",
 }
 
 

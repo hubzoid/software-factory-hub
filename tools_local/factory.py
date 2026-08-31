@@ -58,7 +58,7 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
         return {"refused": "Say what the factory should do."}
     if route not in ROUTES:
         return {"refused": f"route is one of {', '.join(ROUTES)}."}
-    payload = {"source": surface, "request": request[:60000]}
+    payload = {"source": surface, "request": request[:60000], "route": route}
     if issue_number:
         payload["subject"] = {"kind": "github_issue", "number": int(issue_number)}
     if from_work_item:
@@ -67,11 +67,16 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
     chat = _request_ctx.get_chat_id() or ""
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
     key = f"{surface}:{user.email}:{chat}:{turn}:{digest}" if turn else f"{surface}:{user.email}:{digest}"
+    from hubzoid.work_items import store
+
+    kwargs = dict(workflow=WORKFLOW, key=key[:500], route="request" if route == "auto" else route, input=payload,
+                  requester=user.email, origin={"source": "chat", "surface": surface}, actor=user.email)
     try:
-        item, created = service.admit_and_start(
-            _hub_dir(), workflow=WORKFLOW, key=key[:500], route="request" if route == "auto" else route,
-            input=payload, requester=user.email, origin={"source": "chat", "surface": surface}, actor=user.email,
-            generation_mode="reuse")
+        # A retry of the same call returns the same work while it runs. The
+        # same request after that work finished is new work.
+        item, created = service.admit_and_start(_hub_dir(), generation_mode="reuse", **kwargs)
+        if not created and item["state"] in store.TERMINAL:
+            item, created = service.admit_and_start(_hub_dir(), generation_mode="new", **kwargs)
     except WorkItemError as exc:
         return {"refused": exc.message, "code": exc.code}
     return {"work_item": item["id"], "state": item["state"], "created": created, "link": _link(item["id"]),

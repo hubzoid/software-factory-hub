@@ -65,6 +65,22 @@ def checkout_commit(call: str | None) -> str | None:
     return None
 
 
+def export_state(call: str | None) -> dict:
+    """What a station left in its checkout when it finished: new commits, and
+    whether files were changed without a commit (the SDK records both)."""
+    out = {"commits": 0, "dirty": False}
+    if not call:
+        return out
+    from hubzoid.sandbox import service as sandbox_service
+    from hubzoid.workflows import context
+
+    for box in sandbox_service.list_rows(context._ctx().hub_dir, owner_kind="station_call", owner_id=call, limit=10):
+        for exp in box.get("exports_json") or []:
+            out["commits"] += int(exp.get("commits") or 0)
+            out["dirty"] = out["dirty"] or bool(exp.get("dirty"))
+    return out
+
+
 # -- message builders -----------------------------------------------------------------------
 
 def _data(title: str, value) -> str:

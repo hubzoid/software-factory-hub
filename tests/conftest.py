@@ -71,6 +71,14 @@ class Remote:
         self.base = git(seed, "rev-parse", "HEAD").strip()
         self.n = 0
 
+    @classmethod
+    def attach(cls, root: Path) -> "Remote":
+        """The same repository from another process."""
+        r = cls.__new__(cls)
+        r.root, r.bare, r.n = root, root / "example-co" / "widget.git", 1000
+        r.base = r.head("main")
+        return r
+
     def head(self, ref: str) -> str | None:
         res = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=self.bare,
                              env=GIT_ENV, capture_output=True, text=True)
@@ -89,7 +97,7 @@ class Remote:
         self.n += 1
         work = self.root / f"sandbox-{self.n}"
         subprocess.run(["git", "clone", "--quiet", str(self.bare), str(work)], env=GIT_ENV, check=True)
-        start = self.head(ref)
+        start = self.head(ref) or ref
         git(work, "checkout", "--quiet", "--detach", start)
         for path, text in files.items():
             target = work / path
@@ -189,6 +197,9 @@ class FakeGitHub:
             labels = self.issues.setdefault(n, {}).setdefault("labels", [])
             labels += [{"name": x} for x in body.get("labels", [])]
             return R(200, json=labels)
+        if path == f"/repos/{FULL}/pulls" and method == "GET":
+            head = (request.url.params.get("head") or "").split(":", 1)[-1]
+            return R(200, json=[self._pr_json(n) for n, pr in self.pulls.items() if not head or pr["head"] == head])
         if path == f"/repos/{FULL}/pulls" and method == "POST":
             self.next += 1
             n = self.next
@@ -240,6 +251,7 @@ class FakeStations:
         self.changes = [{"calc.py": "def total(xs):\n    return sum(xs)\n"}]
         self.committed = True
         self.reviewed_override = None
+        self.reviewer_dirty = False
         self.boxes: dict[str, dict] = {}
 
     def run(self, hub_dir, definition, message, *, subject=None, timeout=None, registry=None):
@@ -259,7 +271,7 @@ class FakeStations:
                        "verification": [], "deviations": [], "known_limitations": ["The plan needs a decision."]}
             else:
                 files = self.changes.pop(0) if len(self.changes) > 1 else self.changes[0]
-                start, patch, head = self.remote.commit_on(box["ref"], files, "Fix total")
+                start, patch, head = self.remote.commit_on(box["commit"], files, "Fix total")
                 box["patch"], box["start"] = patch, start
                 out = {"branch": "factory/fix", "base": "main", "committed": True, "head_commit": head,
                        "change_summary": [{"path": p, "change": "fixed"} for p in files],
@@ -411,8 +423,9 @@ def stations_fake(monkeypatch, remote, factory_hub):
         call = st.get_call(hub_dir, owner_id)
         sid = f"box-{len(fake.boxes) + 1}"
         ref = (checkout or {}).get("ref") or "main"
+        commit = (checkout or {}).get("commit") or remote.head(ref)
         fake.boxes[sid] = {"id": sid, "owner_id": owner_id, "agent": call["agent"], "ref": ref,
-                           "commit": remote.head(ref), "state": "ready", "live_key": sid}
+                           "commit": commit, "state": "ready", "live_key": sid}
         return {"id": sid}
 
     def rows(hub_dir, *, owner_kind=None, owner_id=None, state=None, limit=50):
@@ -428,11 +441,14 @@ def stations_fake(monkeypatch, remote, factory_hub):
     def export(hub_dir, sandbox_id, out_dir):
         box = fake.boxes[sandbox_id]
         if not box.get("patch"):
-            return []
+            box["exports"] = [{"checkout": "/workspace/repo", "base": box["commit"], "commits": 0, "bytes": 0,
+                               "dirty": fake.reviewer_dirty if box["agent"] == "reviewer" else False,
+                               "sha256": "sha256:" + hashlib.sha256(b"").hexdigest(), "file": ""}]
+            return box["exports"]
         out_dir.mkdir(parents=True, exist_ok=True)
         target = out_dir / f"repo-{box['start'][:12]}.patch"
         target.write_bytes(box["patch"])
-        box["exports"] = [{"checkout": "/workspace/repo", "base": box["start"], "commits": 1,
+        box["exports"] = [{"checkout": "/workspace/repo", "base": box["start"], "commits": 1, "dirty": False,
                            "bytes": len(box["patch"]),
                            "sha256": "sha256:" + hashlib.sha256(box["patch"]).hexdigest(), "file": str(target)}]
         return box["exports"]

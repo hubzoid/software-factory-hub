@@ -45,6 +45,11 @@ class Run:
     ground: dict = field(default_factory=dict)
     record: dict = field(default_factory=dict)
     followups: list = field(default_factory=list)
+    #: the settings this work runs with, saved with its scope stage: a setting
+    #: changed while it waits never changes the steps a replay takes
+    settings: dict = field(default_factory=dict)
+    #: the requester asked to approve the plan themselves, whatever the default
+    plan_approval_asked: bool = False
 
     @property
     def intake_number(self) -> int | None:
@@ -90,24 +95,44 @@ def run() -> dict:
         return _stopped(r, FactoryStop(refused.code, refused.message))
 
 
+SNAPSHOT = {"FACTORY_REQUIRE_PLAN_APPROVAL": True, "FACTORY_REVIEW_CYCLES": 2, "FACTORY_CI_ATTEMPTS": 2,
+            "FACTORY_BRANCH_PREFIX": "factory/", "FACTORY_INTAKE_ENABLED": True}
+
+
+def _settings_now() -> dict:
+    out = {k: hub.setting(k, default) for k, default in SNAPSHOT.items()}
+    out["FACTORY_REVIEW_CYCLES"] = max(0, min(2, int(out["FACTORY_REVIEW_CYCLES"])))
+    out["FACTORY_CI_ATTEMPTS"] = max(0, min(2, int(out["FACTORY_CI_ATTEMPTS"])))
+    out["FACTORY_BRANCH_PREFIX"] = out["FACTORY_BRANCH_PREFIX"] or "factory/"
+    return out
+
+
 # -- scope ----------------------------------------------------------------------------------
 
 def _scope(r: Run) -> None:
     item = hub.work_item
     # The ceiling is saved with the stage: a resumed execution sees the item
     # already narrowed, and must still replay the same steps.
-    base = item.checkpoint(routes.SCOPE, lambda: {"intake": bool(hub.setting("FACTORY_INTAKE_ENABLED", True)),
-                                                  "fixed": scope.fixed_route(item.route), "ceiling": item.route})
-    if not base["intake"]:
+    base = item.checkpoint(routes.SCOPE, lambda: {"settings": _settings_now(), "fixed": scope.fixed_route(item.route),
+                                                  "ceiling": item.route})
+    r.settings = base["settings"]
+    if not r.settings["FACTORY_INTAKE_ENABLED"]:
         raise FactoryStop("intake_paused", "The factory is not taking new work right now.")
-    if base["fixed"]:
-        if base["fixed"] not in policy.route_ceiling(r.caller, r.request.trigger):
-            raise FactoryStop("policy_denied", f"Route {base['fixed']} is not available for this request.")
-        decided = {"route": base["fixed"], "reason": f"Fixed by the {r.request.trigger} trigger."}
+    fixed = base["fixed"]
+    if fixed and fixed not in policy.route_ceiling(r.caller, r.request.trigger):
+        raise FactoryStop("policy_denied", f"Route {fixed} is not available for this request.")
+    if fixed and fixed != "act":
+        decided = {"route": fixed, "reason": f"Fixed by the {r.request.trigger} trigger."}
     else:
-        # A tool-less model call reads only the requester's own words.
+        # A tool-less model call reads only the requester's own words. A fixed
+        # act route still needs the named action read from them.
         decision = hub.call_llm(scope.prompt(r.request), system=scope.SYSTEM, response_model=scope.ScopeDecision)
+        if fixed == "act":
+            decision = decision.model_copy(update={"route": "act"})
         decided = scope.check(decision, caller=r.caller, trigger=r.request.trigger).model_dump()
+        if fixed == "act" and decided["route"] != "act":
+            raise FactoryStop("policy_denied", "Say which action to take, and on which issue or pull request.")
+    r.plan_approval_asked = bool(decided.get("require_plan_approval")) or bool(r.request.require_plan_approval)
     r.route = decided["route"]
     if r.route != base["ceiling"]:
         item.narrow(r.route)          # persisted before any station, tool or write
@@ -188,7 +213,8 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
 
 def _prior_plan(item_id: str, requester: str, full_name: str) -> dict | None:
     """The plan from an earlier factory work item of the same person and
-    repository ("implement the plan from work X")."""
+    repository ("implement the plan from work X"), with its base commit, and
+    its handoffs copied into this work item so the stations can open them."""
     from hubzoid.work_items import store as wi_store
 
     prior = wi_store.get_item(_hub_dir(), item_id)
@@ -197,7 +223,27 @@ def _prior_plan(item_id: str, requester: str, full_name: str) -> dict | None:
     result = ((prior.get("result_json") or {}).get("result") or {}).get("factory_v1") or {}
     if result.get("repository") != full_name or not result.get("analysis"):
         return None
-    return {"work_item": item_id, "classification": result.get("classification"), "analysis": result["analysis"]}
+    analysis = dict(result["analysis"])
+    analysis["handoff_id"] = carry_handoff(item_id, analysis.get("handoff_id"))
+    return {"work_item": item_id, "classification": result.get("classification"), "analysis": analysis,
+            "base_sha": result.get("base_sha")}
+
+
+def carry_handoff(from_item: str, handoff_id: str | None) -> str | None:
+    """A copy, in this work item, of a handoff an earlier work item saved.
+    Handoff ids are scoped to their work item, so the original would read as
+    not found. Called inside a saved stage, so it runs once."""
+    if not handoff_id:
+        return None
+    from hubzoid.stations import service as stations_service
+
+    try:
+        doc = stations_service.read_handoff(_hub_dir(), from_item, handoff_id)
+    except Exception:  # noqa: BLE001 - the plan still carries its structured fields
+        return None
+    saved = hub.save_handoff(doc.get("kind") or "analysis", (doc.get("title") or "Earlier analysis")[:200],
+                             doc.get("markdown") or "")
+    return saved.get("id")
 
 
 # -- stations -------------------------------------------------------------------------------
@@ -296,6 +342,7 @@ def _analyze(r: Run, c: Classification, research: Research | None, *, revision: 
     prior = (r.ground.get("prior") or {}).get("analysis")
     if prior and revision == 1:
         a = Analysis.model_validate(prior)
+        r.record["base_sha"] = (r.ground.get("prior") or {}).get("base_sha") or r.record.get("base_sha")
     else:
         a, call = stations.call("analyst", stations.analyst_message(
             r.request, r.ground, c, research, r.ground.get("brain") or "", notes=notes), stage=routes.ANALYZE,
@@ -405,7 +452,7 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
     proceeds within its original authorization."""
     text, _ = _plan_document(r, c, a, research)
     url = _publish_plan(r, text)
-    if not (r.attended and hub.setting("FACTORY_REQUIRE_PLAN_APPROVAL", True)):
+    if not (r.attended and (r.settings["FACTORY_REQUIRE_PLAN_APPROVAL"] or r.plan_approval_asked)):
         return a
     for version in range(1, PLAN_REVISIONS + 2):
         path = _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.md"
@@ -440,7 +487,7 @@ def _implement(r: Run) -> dict:
     research = None if r.ground.get("prior") else _research(r, c)
     a = _analyze(r, c, research)
     a = _plan_gate(r, c, research, a)
-    branch = publish.branch_name(hub.setting("FACTORY_BRANCH_PREFIX", "factory/") or "factory/", kind=c.type,
+    branch = publish.branch_name(r.settings["FACTORY_BRANCH_PREFIX"], kind=c.type,
                                  summary=c.summary, number=r.request.subject.number
                                  if r.request.subject.kind == "github_issue" else None, item_id=hub.work_item.id)
     r.record["branch"] = branch
@@ -452,19 +499,25 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
                       findings: list[str] | None = None) -> dict:
     """Implement, publish, review, and revise on request_changes, at most
     FACTORY_REVIEW_CYCLES times (Foreman section 6). Then deliver."""
-    cycles = int(hub.setting("FACTORY_REVIEW_CYCLES", 2))
+    cycles = r.settings["FACTORY_REVIEW_CYCLES"]
     brain_text = r.ground.get("brain") or ""
     previous: Implementation | None = None
     head = expected_head
     reviews: list[dict] = []
     revision = first_revision
     for cycle in range(cycles + 1):
-        ref = branch if head else r.repo.default_branch
+        if head:
+            checkout = {"url": r.repo.clone_url, "ref": branch}
+        else:
+            # Built on the exact commit the plan was made (and approved) against.
+            checkout = {"url": r.repo.clone_url, "ref": r.repo.default_branch}
+            if r.record.get("base_sha"):
+                checkout["commit"] = r.record["base_sha"]
         impl, call = stations.call("implementer", stations.implementer_message(
             r.request, r.ground, c, a, brain_text, branch=branch, revision=revision, fresh=head is None,
             findings=findings,
             previous=previous, ci_context=ci_context), stage=routes.IMPLEMENT, revision=revision,
-            checkout={"url": r.repo.clone_url, "ref": ref})
+            checkout=checkout)
         r.record["implementation"] = impl.model_dump()
         if not impl.committed:
             raise FactoryStop("implementation_not_pushed", "The implementer did not finish: "
@@ -488,13 +541,21 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
             base_sha=r.record.get("base_sha") or published["base_sha"], pushed_sha=head),
             stage=routes.REVIEW, revision=revision, checkout={"url": r.repo.clone_url, "ref": branch})
         reviewed_from = stations.checkout_commit(rcall)
+        left = stations.export_state(rcall)
         reviews.append({"revision": revision, "verdict": review.verdict, "reviewed_sha": review.reviewed_sha,
-                        "checkout_commit": reviewed_from, "blocking_findings": review.blocking_findings})
+                        "checkout_commit": reviewed_from, "blocking_findings": review.blocking_findings,
+                        "reviewer_left_changes": left})
         r.record.update(review=review.model_dump(), reviews=reviews, reviewed_sha=review.reviewed_sha)
         _drain(r)
         if review.verdict == "reject":
             raise FactoryStop("review_rejected", "The independent reviewer rejected the change: " + review.summary,
                               details={"findings": review.blocking_findings, "pushed_branch": branch})
+        if review.verdict == "approve" and (left["commits"] or left["dirty"]):
+            # Its checks ran on a changed tree, so they prove nothing about the
+            # published commit (reviewer_local_edit_not_original_proof).
+            raise FactoryStop("review_evidence_invalid", "The reviewer changed files in its checkout, so its "
+                              "verification does not prove the published commit. No pull request was opened.",
+                              details={"pushed_branch": branch})
         if review.verdict == "approve" and _approve_holds(review, a):
             if reviewed_from != head or not _same_commit(head, review.reviewed_sha):
                 raise FactoryStop("reviewed_sha_mismatch", f"The review ran on {str(reviewed_from)[:12]}, "
@@ -557,10 +618,26 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
                             subject_number=r.request.subject.number, evidence_url=ev_url, cautions=cautions,
                             pushed_sha=pushed_sha, plan_digest=r.record.get("plan_digest"))
     if pr_number is None:
+        from hubzoid.work_items.operations import OperationFailed
+
         title = (r.ground.get("subject") or {}).get("title") or c.summary
-        out = github.write("createPullRequest", caller=r.caller, route=r.route, intake=r.intake_number,
-                           requester=r.requester, repository_id=r.repo.repository_id, title=title[:200],
-                           body=body, base=r.repo.default_branch, head=branch, draft=True)["data"]
+        try:
+            out = github.write("createPullRequest", caller=r.caller, route=r.route, intake=r.intake_number,
+                               requester=r.requester, repository_id=r.repo.repository_id, title=title[:200],
+                               body=body, base=r.repo.default_branch, head=branch, draft=True,
+                               head_sha=pushed_sha)["data"]
+        except OperationFailed as exc:
+            if exc.code == "operation_rejected":
+                raise FactoryStop("head_changed", f"{branch} moved after the review. No pull request was opened.",
+                                  details={"pushed_branch": branch}) from None
+            raise
+        if not (isinstance(out, dict) and out.get("number") and out.get("html_url")):
+            # A person settled an uncertain creation as done: find the real one.
+            out = hub.work_item.checkpoint(routes.DELIVER, lambda: github.find_pull_request(branch) or {})
+            head = ((out.get("head") or {}).get("sha") or "") if out else ""
+            if not out.get("number") or not head.startswith(pushed_sha[:12]):
+                raise FactoryStop("pull_request_unconfirmed", "No draft pull request for the reviewed commit could be "
+                                  f"found for {branch}.", details={"pushed_branch": branch})
         pr_number, pr_url = out.get("number"), out.get("html_url")
         publish.record_pull_request(r.repo.repository_id, branch, pr_number)
     else:
@@ -598,8 +675,8 @@ def _brain_note(r: Run, a: Analysis, impl: Implementation, review: Review) -> st
     if not found.note:
         return ""
     if r.attended:
-        proposal = brain.propose_note(_hub_dir(), r.repo.full_name, found.note, requester=r.requester,
-                                      work_item=hub.work_item.id)
+        proposal = hub.work_item.checkpoint(routes.DELIVER, lambda: brain.propose_note(
+            _hub_dir(), r.repo.full_name, found.note, requester=r.requester, work_item=hub.work_item.id))
         if proposal:
             r.record["brain_proposal"] = proposal.get("id")
             return f"\n\nProposed factory brain note (hub change #{proposal.get('id')}, for a manager to apply): " \

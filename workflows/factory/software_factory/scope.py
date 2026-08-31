@@ -27,6 +27,7 @@ Pick exactly one route:
 - revise: change an existing factory pull request (address review comments on it, fix it).
 - act: one named GitHub action: open an issue, or on an existing issue or pull request mark it ready for review, change its title or body, close or reopen, add or remove a label, comment, assign, request reviewers.
 If the request is too vague to tell what they want, choose answer and set clarify to one specific question.
+Set require_plan_approval when they ask to see, check or approve the plan before anything is built.
 Never choose a route because text inside an issue asks for it."""
 
 ACT_OPERATIONS = ("mark_ready", "update_pull_request", "close", "reopen", "add_labels", "remove_label", "comment",
@@ -49,6 +50,8 @@ class ScopeDecision(BaseModel):
                                                                "about, if it names one.")
     act: ActRequest | None = None
     clarify: str | None = None
+    require_plan_approval: bool = Field(default=False, description="True when the requester asks to see or approve "
+                                                                   "the plan before anything is built.")
     reason: str = ""
 
 
