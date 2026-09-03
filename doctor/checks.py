@@ -72,7 +72,7 @@ def github(context) -> dict:
         return _row("fail", f"The GitHub connection {cid!r} is not applied.",
                     f"Connect it: hubzoid channels github connect . {cid} --owner <org> --owner-type organization "
                     f"--name <app-name> --open (a hosted hub), or hubzoid channels github connect . {cid} --mode pat "
-                    f"--repository {s.get('FACTORY_REPO')} (a laptop). See docs/setup.md.")
+                    f"--repository {s.get('FACTORY_REPO')} (a laptop). See SETUP.md, step 5.")
     cfg = conn.settings
     problems, notes = [], []
     if conn.config.workflow != FACTORY:
@@ -93,8 +93,8 @@ def github(context) -> dict:
         notes.append("local token mode: replies use your own GitHub account, pushes use your whole personal token "
                      "(not narrowed to one repository, so use a fine-grained token limited to it), and webhooks "
                      "are not verified")
-        if not s.get("FACTORY_BOT_NAME"):
-            notes.append("token mode needs FACTORY_BOT_NAME set for mentions")
+        if not (s.get("FACTORY_BOT_NAME") or getattr(cfg, "bot_name", None)):
+            notes.append("token mode needs FACTORY_BOT_NAME (or bot_name in the channel file) for mentions")
     if problems:
         return _row("fail", f"GitHub connection {cid}: " + "; ".join(problems) + ".",
                     f"Edit channels/{cid}.yaml and apply it with hubzoid channels apply . --file channels/{cid}.yaml "

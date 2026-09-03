@@ -31,3 +31,15 @@ def test_act_needs_a_named_operation():
 def test_fixed_routes():
     assert scope.fixed_route("request") is None
     assert scope.fixed_route("implement") == "implement"
+
+
+def test_factory_errors_survive_the_engine_storing_them():
+    import pickle
+
+    from software_factory.errors import FactoryStop
+    from software_factory.github import FactoryRefused
+
+    stop = pickle.loads(pickle.dumps(FactoryStop("review_rejected", "No.", details={"findings": ["x"]})))
+    assert (stop.code, stop.message, stop.details) == ("review_rejected", "No.", {"findings": ["x"]})
+    refused = pickle.loads(pickle.dumps(FactoryRefused("repository_unavailable", "Gone.")))
+    assert (refused.code, refused.message) == ("repository_unavailable", "Gone.")

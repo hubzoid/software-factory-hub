@@ -16,11 +16,20 @@ from . import policy
 
 
 class FactoryRefused(Exception):
-    """The factory's policy refused an action before anything was sent."""
+    """The factory's policy refused an action before anything was sent, or
+    GitHub refused a read (an unreachable or moved repository)."""
 
     def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code, self.message = code, message
+
+    def __reduce__(self):
+        return (type(self), (self.code, self.message))
+
+
+def _refused(exc) -> FactoryRefused:
+    return FactoryRefused(getattr(exc, "code", "repository_unavailable"),
+                          getattr(exc, "message", None) or str(exc))
 
 
 @dataclass
@@ -88,9 +97,14 @@ def repo() -> Repo:
 def read(name: str, **arguments) -> dict:
     from hubzoid.channels.github import operations
 
+    from hubzoid.channels.errors import ChannelError
+
     if policy.GITHUB_TOOLS.get(name) != policy.READ:
         raise FactoryRefused("not_a_read", f"{name} is not a read.")
-    return operations.call(connection(), name, arguments)
+    try:
+        return operations.call(connection(), name, arguments)
+    except ChannelError as exc:
+        raise _refused(exc) from None
 
 
 def write(name: str, *, caller: str, route: str, intake: int | None, requester: str, **arguments) -> dict:
@@ -111,7 +125,12 @@ def write(name: str, *, caller: str, route: str, intake: int | None, requester: 
         if not decision.get("approved"):
             raise FactoryRefused("approval_denied", f"{name} was not approved"
                                  + (f": {decision['note']}" if decision.get("note") else "."))
-    return operations.call(connection(), name, arguments)
+    from hubzoid.channels.errors import ChannelError
+
+    try:
+        return operations.call(connection(), name, arguments)
+    except ChannelError as exc:
+        raise _refused(exc) from None
 
 
 def push(*, repository_id: int, branch: str, patch: bytes, patch_sha256: str, base_sha: str,

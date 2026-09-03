@@ -49,6 +49,14 @@ class FactoryStop(Exception):
         super().__init__(message)
         self.code, self.message, self.details = code, message, details or {}
 
+    def __reduce__(self):
+        # The workflow engine stores exceptions raised inside saved steps.
+        return (_rebuild, (type(self), self.code, self.message, self.details))
+
     @property
     def next_step(self) -> str:
         return REASONS.get(self.code, "A person decides what happens next.")
+
+
+def _rebuild(cls, code, message, details):
+    return cls(code, message, details=details)
