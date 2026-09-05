@@ -180,7 +180,12 @@ def install() -> None:
         dest = _state() / "boxes" / sid
         dest.parent.mkdir(parents=True, exist_ok=True)
         url, ref = (checkout or {}).get("url"), (checkout or {}).get("ref")
-        args = ["git", "-c", "core.hooksPath=/dev/null", "clone", "--quiet"] + (["--branch", ref] if ref else [])
+        args = ["git", "-c", "core.hooksPath=/dev/null"]
+        if (url or "").startswith("https://github.com/"):
+            # A private scratch repository: the machine's own GitHub CLI login, for this clone only.
+            args += ["-c", "credential.https://github.com.helper=", "-c",
+                     "credential.https://github.com.helper=!gh auth git-credential"]
+        args += ["clone", "--quiet"] + (["--branch", ref] if ref else [])
         subprocess.run(args + ["--", url, str(dest)], check=True, capture_output=True, env=_git_env(), timeout=300)
         if (checkout or {}).get("commit"):
             _git(dest, "checkout", "--quiet", "--detach", checkout["commit"])
