@@ -652,11 +652,11 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
     r.record.update(pr_number=pr_number, pr_url=pr_url, evidence_url=ev_url)
     progress.record(pr_number=pr_number, pr_url=pr_url, evidence_url=ev_url)
     note = _brain_note(r, a, impl, review)
-    look = "; ".join(cautions + impl.known_limitations[:3]) or "nothing unusual"
+    look = "; ".join(x.strip().rstrip(".") for x in cautions + impl.known_limitations[:3]) or "nothing unusual"
     text = (f"Draft pull request #{pr_number} is ready for a person to review: {pr_url}\n\n"
             f"{a.problem_statement.strip()} The change is on {branch} at `{pushed_sha[:12]}`. The independent "
             f"reviewer approved that exact commit, with {len(a.acceptance_criteria)} of "
-            f"{len(a.acceptance_criteria)} acceptance criteria passing. Look at before marking it ready: {look}."
+            f"{len(a.acceptance_criteria)} acceptance criteria passing. Check before marking it ready: {look}."
             + (f"\n\nEvidence: {ev_url}" if ev_url else "") + note)
     return _done(r, "delivered", text)
 
