@@ -142,6 +142,17 @@ def _fix_files(message: str) -> dict[str, str]:
             + "\n## Reporting bugs\n\nPlease include the version you use and the steps to reproduce.\n"}
 
 
+
+def _ci_repair_files() -> dict[str, str]:
+    """A CI repair on a factory branch: a scripted follow-up commit (the
+    stand-in cannot run the failing check, so it adds the regression case the
+    check reported)."""
+    return {"tests/test_totals_discount.py": (
+        "from decimal import Decimal\n\nfrom invoice.totals import Line, total_with_tax\n\n\n"
+        "def test_discounted_basket_rounds_once():\n"
+        "    lines = [Line(\"a\", 3, Decimal(\"0.10\"))]\n"
+        "    assert total_with_tax(lines, Decimal(\"0.05\"), Decimal(\"10\")) == Decimal(\"0.28\")\n")}
+
 def _box(sid: str) -> dict:
     with _locked("boxes") as b:
         return dict(b["data"].get(sid) or {})
@@ -234,15 +245,19 @@ def install() -> None:
             branch = re.search(r"local branch `([^`]+)`", message)
             if branch:
                 _git(path, "checkout", "--quiet", "-b", branch.group(1))
-            for rel, text in _fix_files(message).items():
+            repair = "Failing checks" in message
+            files_now = _ci_repair_files() if repair else _fix_files(message)
+            for rel, text in files_now.items():
+                (path / rel).parent.mkdir(parents=True, exist_ok=True)
                 (path / rel).write_text(text)
             _git(path, "add", "-A")
-            _git(path, "commit", "--quiet", "-m", "Round invoice totals once, after tax"
-                 if re.search(r"cent|round", message, re.I) else "Add a Reporting bugs section")
+            _git(path, "commit", "--quiet", "-m", "Cover the discounted basket the failing check reported" if repair
+                 else "Round invoice totals once, after tax" if re.search(r"cent|round", message, re.I)
+                 else "Add a Reporting bugs section")
             head = _git(path, "rev-parse", "HEAD").strip()
             patch = _git(path, "format-patch", "--stdout", f"{box['commit']}..HEAD")
             _save_box(sid, patch=patch)
-            files = list(_fix_files(message))
+            files = list(files_now)
             out = {"branch": branch.group(1) if branch else "factory/fix", "base": "main", "committed": True,
                    "head_commit": head, "change_summary": [{"path": p, "change": "applied the planned change"}
                                                            for p in files],
