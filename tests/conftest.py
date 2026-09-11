@@ -253,11 +253,17 @@ class FakeStations:
         self.reviewed_override = None
         self.reviewer_dirty = False
         self.boxes: dict[str, dict] = {}
+        self.failures: dict[str, int] = {}     # station name -> runs that crash
 
     def run(self, hub_dir, definition, message, *, subject=None, timeout=None, registry=None):
         name = definition["name"]
         self.calls.append({"name": name, "message": message, "checkout": definition.get("checkout"),
                            "tools": sorted(registry or {})})
+        if self.failures.get(name):
+            from hubzoid import runtime
+
+            self.failures[name] -= 1
+            raise runtime.AgentRunError("the runtime exited before answering")
         if name == "classifier":
             out = dict(self.classifications.pop(0) if self.classifications else self.classification)
         elif name == "researcher":

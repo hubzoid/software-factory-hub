@@ -17,6 +17,7 @@ import json
 from hubzoid import hub
 from hubzoid.stations import StationError, StationOutputError
 
+from .errors import FactoryStop
 from .schemas import STATIONS
 
 CLARIFY_SHAPE = ("Your previous answer did not match the required result. Return one JSON object with exactly "
@@ -24,18 +25,26 @@ CLARIFY_SHAPE = ("Your previous answer did not match the required result. Return
 
 
 def call(agent: str, message: str, *, stage: str, revision: int = 1, checkout: dict | None = None):
-    """Run one station and return (validated result, call id)."""
+    """Run one station and return (validated result, call id). A station that
+    still fails after its one retry stops the work with the reason on its
+    thread (open-swe: every run ends in a pull request or a clear stop)."""
     model = STATIONS[agent]
     try:
-        out = hub.call_agent(message, agent=agent, stage=stage, revision=revision, checkout=checkout)
-    except StationOutputError as exc:
-        out = hub.retry_station(exc.call_id, CLARIFY_SHAPE)
+        try:
+            out = hub.call_agent(message, agent=agent, stage=stage, revision=revision, checkout=checkout)
+        except StationOutputError as exc:
+            out = hub.retry_station(exc.call_id, CLARIFY_SHAPE)
+        except StationError as exc:
+            if not getattr(exc, "fields", {}).get("retryable", True) or exc.code in (
+                    "cancelled", "definition_changed", "retry_exhausted"):
+                raise
+            out = hub.retry_station(exc.call_id, f"The previous attempt failed ({exc.code}). Start again from the "
+                                                 "task above and finish it.")
     except StationError as exc:
-        if not getattr(exc, "fields", {}).get("retryable", True) or exc.code in ("cancelled", "definition_changed",
-                                                                                   "retry_exhausted"):
+        if exc.code == "cancelled":
             raise
-        out = hub.retry_station(exc.call_id, f"The previous attempt failed ({exc.code}). Start again from the "
-                                             "task above and finish it.")
+        raise FactoryStop("station_failed", f"The {agent} station could not finish ({exc.code}): "
+                                            f"{str(exc.message)[:300]}") from None
     return model.model_validate(out), call_id(stage, revision)
 
 

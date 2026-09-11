@@ -201,10 +201,10 @@ def test_single_semantic_retry_then_failure(factory, monkeypatch):
         return real(hub_dir, definition, message, **kw)
 
     monkeypatch.setattr(runtime, "run_station", malformed)
-    with pytest.raises(Exception) as err:
-        factory.run(factory.label())
+    out = factory.run(factory.label())
     assert seen.count("classifier") == 2                                  # the first try and the one retry
-    assert getattr(err.value, "code", "") in ("station_output_error", "retry_exhausted")
+    assert (out["factory_v1"]["outcome"], out["factory_v1"]["stop_reason"]) == ("stopped", "station_failed")
+    assert "classifier station could not finish" in factory.api.comments[12][-1]["body"]
 
 
 def test_implementer_that_cannot_finish_publishes_nothing(factory):

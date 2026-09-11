@@ -192,3 +192,19 @@ def test_chat_keys_tell_routes_and_finished_work_apart(factory, monkeypatch):
     store.update_item(factory.hub_dir, item["id"], expected_revision=item["revision"], state="completed")
     again = tools._start("Fix total", 12, "plan", None, "mcp")
     assert again["created"] and again["state"] != "completed"
+
+
+def test_a_station_that_fails_twice_ends_in_a_clear_stop(factory):
+    # Found in the live run: a station crash after its retry failed the item
+    # with nothing said on the issue.
+    factory.stations.failures = {"implementer": 2}
+    out = factory.run(factory.label())
+    assert outcome(out) == ("stopped", "station_failed") and not factory.api.pulls
+    note = factory.api.comments[12][-1]["body"]
+    assert "implementer station could not finish" in note and "Run checks" in note
+
+
+def test_a_station_that_fails_once_is_retried(factory):
+    factory.stations.failures = {"implementer": 1}
+    out = factory.run(factory.label())
+    assert outcome(out)[0] == "delivered" and factory.api.pulls

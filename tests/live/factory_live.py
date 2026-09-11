@@ -143,11 +143,11 @@ def _fix_files(message: str) -> dict[str, str]:
 
 
 
-def _ci_repair_files() -> dict[str, str]:
+def _ci_repair_files(base: str) -> dict[str, str]:
     """A CI repair on a factory branch: a scripted follow-up commit (the
     stand-in cannot run the failing check, so it adds the regression case the
     check reported)."""
-    return {"tests/test_totals_discount.py": (
+    return {f"tests/test_totals_discount_{base[:7]}.py": (
         "from decimal import Decimal\n\nfrom invoice.totals import Line, total_with_tax\n\n\n"
         "def test_discounted_basket_rounds_once():\n"
         "    lines = [Line(\"a\", 3, Decimal(\"0.10\"))]\n"
@@ -246,7 +246,7 @@ def install() -> None:
             if branch:
                 _git(path, "checkout", "--quiet", "-b", branch.group(1))
             repair = "Failing checks" in message
-            files_now = _ci_repair_files() if repair else _fix_files(message)
+            files_now = _ci_repair_files(box["commit"]) if repair else _fix_files(message)
             for rel, text in files_now.items():
                 (path / rel).parent.mkdir(parents=True, exist_ok=True)
                 (path / rel).write_text(text)
