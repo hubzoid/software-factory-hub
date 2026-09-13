@@ -70,7 +70,32 @@ def test_duplicate_ci_single_reservation(factory):
 
     state = WorkflowState(db.operational_engine(factory.hub_dir), "factory", "factory", owner=SHARED)
     slots = [state.get(ci.ATTEMPT.format(rid=h.REPO_ID, branch=rec["branch"], n=n)) for n in (1, 2)]
-    assert slots == [rec["pushed_sha"], None]
+    assert slots == [{"head": rec["pushed_sha"], "item": first["id"]}, None]
+
+
+def test_restarted_ci_work_runs_its_own_attempt_again(factory, monkeypatch):
+    # Found in the live run: CI work that crashed after taking its attempt
+    # slot was restarted by a manager, saw its own slot and stopped as a
+    # duplicate.
+    from software_factory import stations
+
+    rec = deliver_pr(factory)
+    item = red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="ci-r")
+    real, crashes = stations.call, [1]
+
+    def crash_once(agent, *a, **kw):
+        if agent == "implementer" and crashes:
+            crashes.pop()
+            raise RuntimeError("the hub process died")
+        return real(agent, *a, **kw)
+
+    monkeypatch.setattr(stations, "call", crash_once)
+    with pytest.raises(RuntimeError):
+        factory.run(item)
+    out = factory.run(item, fresh_execution=True)                     # restart from the CI stage
+    assert outcome(out) == ("delivered", None) and out["factory_v1"]["ci_attempt"] == 1
+    starts = [c["body"] for c in factory.api.comments[rec["pr_number"]] if c["body"].startswith("CI fix attempt")]
+    assert len(starts) == 1                                           # the attempt note is not repeated
 
 
 def test_branch_prefix_not_ownership(factory):

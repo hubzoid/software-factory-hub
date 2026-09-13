@@ -20,6 +20,7 @@ records are written idempotently, so a replay takes the same path.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import dataclass, field
@@ -775,8 +776,15 @@ def _done(r: Run, outcome: str, text: str, **extra) -> dict:
     r.record.update(outcome=outcome, terminal_stage=routes.TERMINAL_STAGE.get(r.route), reply=text[:20000],
                     finished=time.time(), **extra)
     progress.record(outcome=outcome, reply=text[:20000], **extra)
-    posted = progress.reply(text, key="wrapup")
+    posted = progress.reply(text, key=_wrapup_key(text))
     return {"posted": posted, "reply": text, "factory_v1": r.record}
+
+
+def _wrapup_key(text: str) -> str:
+    """The wrap-up post's key, by content: a replay rebuilds the same text from
+    saved steps and sends nothing new, while work a manager restarted that
+    ends differently says so once."""
+    return "wrapup:" + hashlib.sha256(text.encode()).hexdigest()[:16]
 
 
 def _stopped(r: Run, stop: FactoryStop) -> dict:
@@ -803,5 +811,5 @@ def _stopped(r: Run, stop: FactoryStop) -> dict:
         r.record["evidence_path"] = str(ev)
     except Exception:  # noqa: BLE001 - the reply still goes out
         pass
-    posted = progress.reply(text, key="wrapup", kind="result")
+    posted = progress.reply(text, key=_wrapup_key(text), kind="result")
     return {"posted": posted, "reply": text, "factory_v1": r.record}

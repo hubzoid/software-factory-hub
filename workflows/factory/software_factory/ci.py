@@ -11,7 +11,9 @@ model. HUB-6 names both as weaknesses. Here a repair needs, freshly checked:
   to the factory's last push;
 * checks still failing at that head;
 * an attempt left, counted once per failing head in the ledger, capped at
-  ``FACTORY_CI_ATTEMPTS`` and surviving restarts.
+  ``FACTORY_CI_ATTEMPTS`` and surviving restarts. A slot names the work
+  that took it, so that work may run again after a manager restarts it,
+  while other work for the same head stays a duplicate.
 
 The attempt comment is posted before the repair starts, so a run that dies
 mid-repair still counts. Stale or duplicate events stop quietly.
@@ -31,17 +33,23 @@ class Quiet(FactoryStop):
 ATTEMPT = "factory_v1:ci:{rid}:{branch}:{n}"
 
 
-def attempts(repository_id: int, branch: str, cap: int) -> list[str]:
-    """The failing heads that already used a repair attempt on this branch.
-    Each attempt is its own write-once key, so no other writer's update of
-    the branch ledger can erase one, and a new head never resets the count."""
+def slots(repository_id: int, branch: str, cap: int) -> list[dict]:
+    """The repair attempts already used on this branch, in order: the failing
+    head and the work item that took the slot. Each attempt is its own
+    write-once key, so no other writer's update of the branch ledger can
+    erase one, and a new head never resets the count."""
     out = []
     for n in range(1, cap + 2):
-        head = hub.shared_state.get(ATTEMPT.format(rid=repository_id, branch=branch, n=n))
-        if not head:
+        value = hub.shared_state.get(ATTEMPT.format(rid=repository_id, branch=branch, n=n))
+        if not value:
             break
-        out.append(head)
+        out.append(value if isinstance(value, dict) else {"head": value, "item": None})
     return out
+
+
+def attempts(repository_id: int, branch: str, cap: int) -> list[str]:
+    """The failing heads that already used a repair attempt on this branch."""
+    return [s["head"] for s in slots(repository_id, branch, cap)]
 
 
 def reserve(repository_id: int, branch: str, head: str, cap: int) -> int | None:
@@ -53,7 +61,8 @@ def reserve(repository_id: int, branch: str, head: str, cap: int) -> int | None:
         return used.index(head) + 1
     if len(used) >= cap:
         return None
-    hub.shared_state[ATTEMPT.format(rid=repository_id, branch=branch, n=len(used) + 1)] = head
+    hub.shared_state[ATTEMPT.format(rid=repository_id, branch=branch, n=len(used) + 1)] = {
+        "head": head, "item": hub.work_item.id}
     return len(used) + 1
 
 
@@ -122,8 +131,10 @@ def admit(r) -> dict:
                               number=number)["data"]
         if not failing.get("jobs"):
             return {"quiet": "ci_not_failing"}
-        used = attempts(repo.repository_id, pr["branch"], cap)
-        if pr["head_sha"] in used:
+        taken = slots(repo.repository_id, pr["branch"], cap)
+        used = [s["head"] for s in taken]
+        mine = next((s for s in taken if s["head"] == pr["head_sha"]), None)
+        if mine and mine["item"] != hub.work_item.id:
             return {"quiet": "duplicate_failure"}
         prior = _prior(entry.get("owner_item"))
         if not prior.get("analysis"):
@@ -131,7 +142,7 @@ def admit(r) -> dict:
         analysis = dict(prior["analysis"])
         analysis["acceptance_criteria"] = list(analysis.get("acceptance_criteria") or []) + [
             "The checks that failed at the previous head pass, without weakening or skipping them."]
-        return {"repo": repo.__dict__, "pr": pr, "attempts": used, "exhausted": len(used) >= cap,
+        return {"repo": repo.__dict__, "pr": pr, "attempts": used, "exhausted": not mine and len(used) >= cap,
                 "owner_item": entry.get("owner_item"), "ci_context": failing,
                 "classification": prior["classification"], "analysis": analysis, "brain": _brain_of(repo)}
 
