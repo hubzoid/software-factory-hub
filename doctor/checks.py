@@ -90,9 +90,11 @@ def github(context) -> dict:
     if not conn.config.enabled:
         notes.append("paused (enabled: false), so GitHub events are recorded but start nothing")
     if cfg.mode == "pat":
-        notes.append("local token mode: replies use your own GitHub account, pushes use your whole personal token "
-                     "(not narrowed to one repository, so use a fine-grained token limited to it), and webhooks "
-                     "are not verified")
+        notes.append("local token mode: replies use your own GitHub account, and pushes use your whole personal "
+                     "token (not narrowed to one repository, so use a fine-grained token limited to it)")
+    if not getattr(cfg, "webhook_secret_ref", None):
+        notes.append("no webhook secret, so GitHub deliveries are refused and work starts only by manual intake "
+                     "(hubzoid channels github intake)")
         if not (s.get("FACTORY_BOT_NAME") or getattr(cfg, "bot_name", None)):
             notes.append("token mode needs FACTORY_BOT_NAME (or bot_name in the channel file) for mentions")
     if problems:
@@ -204,8 +206,8 @@ def channels(context) -> dict:
     if rows:
         return _row("fail", "; ".join(rows) + ".", "Apply the channel file (see channels/*.yaml.example).")
     enabled = ", ".join(s.get("FACTORY_CHANNELS") or [])
-    return _row("ok", f"Requests come from {enabled}. ClickUp and other trackers work by pulling an issue in through "
-                      "their MCP server.")
+    return _row("ok", f"Requests come from {enabled}. Other trackers are not built in: a chat request can pull an "
+                      "issue in through that tracker's MCP server when one is connected.")
 
 
 def runtime(context) -> dict:
