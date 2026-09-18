@@ -11,7 +11,7 @@ Settings are declared in `settings.yaml` and set in `hub.settings.yaml`. Check w
 | `FACTORY_GITHUB_CONNECTION` | string, `github` | The GitHub channel connection id (`channels/<id>.yaml`). |
 | `FACTORY_LINEAR_CONNECTION` | string, empty | The Linear connection id, needed when `linear` is in `FACTORY_CHANNELS`. |
 | `FACTORY_SLACK_CONNECTION` | string, empty | The Slack connection id, needed when `slack` is in `FACTORY_CHANNELS`. |
-| `FACTORY_CHANNELS` | list, `[chat, mcp, github]` | Where people may ask: any of `chat`, `mcp`, `github`, `linear`, `slack`. Each enabled channel must pass doctor. ClickUp and other trackers work by pulling an issue in through their MCP server. |
+| `FACTORY_CHANNELS` | list, `[chat, mcp, github]` | Where people may ask: any of `chat`, `mcp`, `github`, `linear`, `slack`. Each enabled channel must pass doctor. Other trackers are not built in: a chat request can pull an issue in through that tracker's MCP server. |
 | `FACTORY_INTAKE_ENABLED` | boolean, `true` | False stops new work. Waiting decisions, recovery and cancellation keep working. |
 | `FACTORY_REQUIRE_PLAN_APPROVAL` | boolean, `true` | Attended implementation waits for the requester to approve the exact plan. Unattended label work never waits on a person. |
 | `FACTORY_REVIEW_CYCLES` | integer 0 to 2, `2` | Revisions allowed after the reviewer requests changes. At the cap the work stops as `review_unresolved` with the pushed branch left for a person. |

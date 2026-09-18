@@ -17,7 +17,7 @@ It is a Hubzoid port of eve's Software Factory template ("Foreman", MIT), with p
 | Open a pull request | Posts one orientation comment for reviewers: what it does and a table of the changed files. Not a review. |
 | Ask it to mark a pull request ready | Waits for your approval of that exact change, then does it. Merging stays with you. |
 
-Slack and Linear work the same way once connected. ClickUp and other trackers work by pulling an issue into a chat request through their MCP server.
+Slack and Linear work the same way once connected. Other trackers are not built in: a chat request can pull an issue in through that tracker's MCP server.
 
 ## How a request flows
 
