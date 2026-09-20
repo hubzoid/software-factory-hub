@@ -8,3 +8,4 @@ tools:
   start_factory_work: {ask: never}
   factory_status: {ask: never}
   list_factory_work: {ask: never}
+  factory_repository: {ask: never}

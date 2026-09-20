@@ -208,3 +208,15 @@ def test_a_station_that_fails_once_is_retried(factory):
     factory.stations.failures = {"implementer": 1}
     out = factory.run(factory.label())
     assert outcome(out)[0] == "delivered" and factory.api.pulls
+
+
+def test_chat_learns_the_repository_id_in_one_call(factory):
+    # Found in the live chat run: the agent spent a dozen tool calls finding
+    # the id every GitHub read tool needs.
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("factory_tools", factory.hub_dir / "tools_local" / "factory.py")
+    tools = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tools)
+    assert tools._repository() == {"repository": h.FULL, "repository_id": h.REPO_ID, "connection": "github",
+                                   "label": "factory", "branch_prefix": "factory/"}

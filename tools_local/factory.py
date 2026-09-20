@@ -122,6 +122,33 @@ def _list(limit: int) -> dict:
                       "outcome": _record(i["id"]).get("outcome")} for i in items or []]}
 
 
+def _repository() -> dict:
+    """FACTORY_REPO and its numeric id in the GitHub connection: every GitHub
+    read tool needs the id, and a name alone can belong to someone else later."""
+    from hubzoid.channels import config
+    from hubzoid.hubs import settings
+
+    values = settings.effective(_hub_dir())
+    wanted = (values.get("FACTORY_REPO") or "").lower()
+    cid = values.get("FACTORY_GITHUB_CONNECTION") or "github"
+    try:
+        conn = config.active(_hub_dir(), cid)
+    except Exception:  # noqa: BLE001
+        return {"repository": wanted, "refused": f"The GitHub connection {cid} is not set up. Run checks in Setup."}
+    match = next((r for r in conn.settings.repositories or [] if r.full_name.lower() == wanted), None)
+    if match is None:
+        return {"repository": wanted, "refused": f"{wanted} is not one of the {cid} connection's repositories."}
+    return {"repository": match.full_name, "repository_id": int(match.id), "connection": cid,
+            "label": values.get("FACTORY_LABEL"), "branch_prefix": values.get("FACTORY_BRANCH_PREFIX")}
+
+
+@function_tool
+async def factory_repository() -> str:
+    """The repository the factory works on and its numeric repository_id. Call it once before the GitHub read
+    tools (github__getFileContent, github__searchCode and the rest), which all take that repository_id."""
+    return json.dumps(await asyncio.to_thread(_repository))
+
+
 @function_tool
 async def start_factory_work(request: str, issue_number: int | None = None, route: str = "auto",
                              from_work_item: str | None = None) -> str:
