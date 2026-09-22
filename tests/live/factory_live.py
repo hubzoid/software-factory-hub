@@ -84,8 +84,11 @@ def _fake_github():
                                        "html_url": f"https://github.com/{h.FULL}/issues/{n}", "comments": 0}
                                    for n, i in enumerate(seed, start=1)}
                     self.labels = json.loads((HUB_ROOT / "fixtures" / "sample-labels.json").read_text())
+                read = _repository_read(self.remote.bare, request) if request.method == "GET" else None
                 if request.url.path == "/user":
                     resp = httpx.Response(200, json={"login": "factory-demo", "id": 4242})
+                elif read is not None:
+                    resp = httpx.Response(read[0], json=read[1])
                 else:
                     resp = super().__call__(request)
                 box["data"] = {"issues": self.issues, "comments": self.comments, "pulls": self.pulls,
@@ -100,6 +103,78 @@ def _fake_github():
     remote = h.Remote.attach(Path(os.environ["FACTORY_LIVE_REMOTE"]))
     return httpx.MockTransport(FileGitHub(remote))
 
+
+
+def _repository_read(bare: Path, request) -> tuple[int, object] | None:
+    """Repository reads GitHub serves from git (contents, trees, branches,
+    commits, code search), answered from the local bare repository the
+    factory pushes to. None for anything else."""
+    import base64
+    from urllib.parse import unquote
+
+    import tests.conftest as h
+    from hubzoid.sandbox.service import _git_env
+
+    raw = request.url.raw_path.decode().split("?")[0]
+    prefix = f"/repos/{h.FULL}"
+    params = dict(request.url.params)
+
+    def run(*args) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", *args], cwd=bare, capture_output=True, env=_git_env(), timeout=60)
+
+    def resolve(ref: str | None) -> str | None:
+        res = run("rev-parse", "--verify", "--quiet", f"{ref or 'main'}^{{commit}}")
+        return res.stdout.decode().strip() if res.returncode == 0 else None
+
+    if raw.startswith(prefix + "/contents"):
+        path = unquote(raw[len(prefix + "/contents"):]).strip("/")
+        sha = resolve(params.get("ref"))
+        if sha is None:
+            return 404, {"message": "No commit found for the ref"}
+        kind = run("cat-file", "-t", f"{sha}:{path}" if path else f"{sha}^{{tree}}").stdout.decode().strip()
+        if kind == "tree":
+            listing = run("ls-tree", sha, *([path + "/"] if path else [])).stdout.decode().splitlines()
+            return 200, [{"path": line.split("\t", 1)[1], "name": line.split("\t", 1)[1].rsplit("/", 1)[-1],
+                          "type": "dir" if " tree " in line else "file"} for line in listing]
+        if kind != "blob":
+            return 404, {"message": "Not Found"}
+        blob = run("rev-parse", f"{sha}:{path}").stdout.decode().strip()
+        body = run("cat-file", "blob", blob).stdout
+        return 200, {"type": "file", "path": path, "name": path.rsplit("/", 1)[-1], "sha": blob, "size": len(body),
+                     "encoding": "base64", "content": base64.b64encode(body).decode()}
+    m = re.fullmatch(re.escape(prefix) + r"/git/trees/(.+)", raw)
+    if m:
+        sha = resolve(unquote(m.group(1)))
+        if sha is None:
+            return 404, {"message": "Not Found"}
+        rows = run("ls-tree", "-r", "-t", "-l", sha).stdout.decode().splitlines()
+        tree = []
+        for line in rows:
+            meta, path = line.split("\t", 1)
+            _mode, kind, _obj, size = meta.split()
+            tree.append({"path": path, "type": kind, "size": None if size == "-" else int(size)})
+        return 200, {"sha": sha, "tree": tree, "truncated": False}
+    if raw == prefix + "/branches":
+        refs = run("for-each-ref", "--format=%(refname:short) %(objectname)", "refs/heads").stdout.decode()
+        return 200, [{"name": n, "commit": {"sha": c}, "protected": n == "main"}
+                     for n, c in (line.split() for line in refs.splitlines())]
+    if raw == prefix + "/commits":
+        sha = resolve(params.get("sha"))
+        log = run("log", "--format=%H%x09%an%x09%aI%x09%s", "-n", "30", sha or "main").stdout.decode()
+        return 200, [{"sha": c, "commit": {"message": subj, "author": {"name": who, "date": when}}}
+                     for c, who, when, subj in (line.split("\t", 3) for line in log.splitlines())]
+    if raw == "/search/code":
+        words = [w for w in (params.get("q") or "").split() if ":" not in w]
+        if not words:
+            return 200, {"total_count": 0, "incomplete_results": False, "items": []}
+        args = ["grep", "-l", "-i", "-F"]
+        for w in words:
+            args += ["-e", w]
+        found = run(*args, "main").stdout.decode().splitlines()
+        items = [{"name": f.split(":", 1)[1].rsplit("/", 1)[-1], "path": f.split(":", 1)[1],
+                  "repository": {"full_name": h.FULL}} for f in found]
+        return 200, {"total_count": len(items), "incomplete_results": False, "items": items}
+    return None
 
 # -- sandbox and station stand-ins ------------------------------------------------------------
 
