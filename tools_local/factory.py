@@ -79,9 +79,15 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
             item, created = service.admit_and_start(_hub_dir(), generation_mode="new", **kwargs)
     except WorkItemError as exc:
         return {"refused": exc.message, "code": exc.code}
+    from hubzoid.hubs import settings
+
+    gated = route in ("auto", "implement") and settings.effective(_hub_dir()).get("FACTORY_REQUIRE_PLAN_APPROVAL",
+                                                                                 True)
+    note = ("Nothing is built until you approve this work's plan under Waiting for you. A plan from earlier work "
+            "is reused as the starting point, never as an approval. " if gated else "")
     return {"work_item": item["id"], "state": item["state"], "created": created, "link": _link(item["id"]),
-            "note": "The factory works in the background. Plans and pull request updates wait for your approval "
-                    "under Waiting for you. Ask for its status any time."}
+            "note": note + "The factory works in the background. Pull request updates wait for your approval under "
+                           "Waiting for you. Ask for its status any time."}
 
 
 def _status(work_item: str) -> dict:
@@ -102,6 +108,10 @@ def _status(work_item: str) -> dict:
                 "pr_url", "evidence_url", "reply"):
         if rec.get(key) not in (None, ""):
             out[key] = rec[key]
+    if rec.get("plan_url"):
+        approved = rec.get("plan_approved")
+        out["plan_approval"] = (f"approved by {approved.get('by')} (version {approved.get('version')})" if approved
+                                else "not approved: this work's plan was not approved by anyone")
     waiting = [o for o in view.get("operations") or [] if o.get("state") in ("awaiting_approval", "ambiguous")]
     if waiting:
         out["waiting_on_you"] = [{"operation": o.get("id"), "name": o.get("name"), "state": o.get("state")}

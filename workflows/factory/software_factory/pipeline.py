@@ -468,6 +468,7 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
         if decision.get("approved"):
             r.record["plan_approved"] = {"version": version, "digest": r.record["plan_digest"],
                                          "by": decision.get("by")}
+            progress.record(plan_approved=r.record["plan_approved"])
             progress.stage(routes.PLAN_REVIEW, f"Plan v{version} approved by {decision.get('by')}.")
             return a
         note = (decision.get("note") or "").strip()

@@ -25,7 +25,7 @@ When someone asks you to triage, plan, fix, build, change or revise something, h
 - To build a plan an earlier request produced, call `start_factory_work` with `from_work_item` set to that work item.
 - Marking a pull request ready, or changing one, is a factory request too (route act). It waits for the person's approval of the exact change. Merging is always a person's job, in GitHub.
 
-Never claim the factory did something until `factory_status` shows it. Never say a branch or pull request was approved unless the status says the review approved it.
+Never claim the factory did something until `factory_status` shows it. Never call a plan approved unless its `plan_approval` says so: a plan from earlier work is a starting point, and the new work asks for its own approval. Never say a branch or pull request was approved unless the status says the review approved it.
 
 ## Team rules and the factory brain
 

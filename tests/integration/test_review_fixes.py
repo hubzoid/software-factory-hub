@@ -220,3 +220,26 @@ def test_chat_learns_the_repository_id_in_one_call(factory):
     spec.loader.exec_module(tools)
     assert tools._repository() == {"repository": h.FULL, "repository_id": h.REPO_ID, "connection": "github",
                                    "label": "factory", "branch_prefix": "factory/"}
+
+
+def test_status_says_whether_a_plan_was_approved(factory, monkeypatch):
+    # Found in the live chat run: the agent called a plan-only request's plan
+    # "already approved" and told the person it was implementing.
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("factory_tools", factory.hub_dir / "tools_local" / "factory.py")
+    tools = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tools)
+
+    class User:
+        email = h.OWNER
+
+    monkeypatch.setattr(tools, "_who", lambda: User())
+    factory.model.route = dict(factory.model.route, route="plan")
+    planned = factory.run(factory.chat("Plan the fix for total, stop after the plan", issue=12))
+    status = tools._status(planned["factory_v1"]["work_item"])
+    assert status["plan_approval"].startswith("not approved")
+    factory.model.route = dict(factory.model.route, route="implement")
+    built = factory.run(factory.chat("Fix total", issue=12))
+    status = tools._status(built["factory_v1"]["work_item"])
+    assert status["plan_approval"] == f"approved by {h.OWNER} (version 1)"
