@@ -243,3 +243,11 @@ def test_status_says_whether_a_plan_was_approved(factory, monkeypatch):
     built = factory.run(factory.chat("Fix total", issue=12))
     status = tools._status(built["factory_v1"]["work_item"])
     assert status["plan_approval"] == f"approved by {h.OWNER} (version 1)"
+    # Work approved before the progress record carried the approval: the result still says so.
+    from hubzoid import db
+    from hubzoid.workflows.state import SHARED, WorkflowState
+
+    state = WorkflowState(db.operational_engine(factory.hub_dir), "factory", "factory", owner=SHARED)
+    key = f"factory_v1:item:{built['factory_v1']['work_item']}"
+    state[key] = {k: v for k, v in state.get(key).items() if k != "plan_approved"}
+    assert tools._status(built["factory_v1"]["work_item"])["plan_approval"].startswith("approved by")
