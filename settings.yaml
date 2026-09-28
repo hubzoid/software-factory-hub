@@ -37,7 +37,7 @@ settings:
     default: [chat, mcp, github]
     enum: [chat, mcp, github, linear, slack]
   - name: FACTORY_INTAKE_ENABLED
-    description: False stops new work. Waiting decisions, recovery and cancellation still work.
+    description: False stops new work after the hub restarts. Waiting decisions, recovery and cancellation still work. To stop GitHub events at once, pause the channel.
     type: boolean
     default: true
   - name: FACTORY_REQUIRE_PLAN_APPROVAL

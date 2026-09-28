@@ -4,7 +4,7 @@
 
 - Laptop: `hubzoid run . --port 8701 --bridge-port 8702` with `HUBZOID_SCHEDULES=1` in `.env`. Without it, work items never run.
 - Hosted: follow Hubzoid's Railway or Maritime guide (SDK `docs/deploy/`), with a GitHub App (not a personal token), `HUBZOID_PUBLIC_URL` set for webhooks, and a separate sandbox service when the host has no Docker. A Claude subscription token or a Codex login works for unattended runs.
-- Pause new work with `FACTORY_INTAKE_ENABLED: false` (waiting decisions and recovery continue), or pause one channel with `hubzoid channels pause . github --expected-revision N`.
+- Pause new work with `FACTORY_INTAKE_ENABLED: false` (Setup in the Console, or `hub.settings.yaml`). Like every hub setting it applies when the hub restarts. Waiting decisions, recovery and cancellation continue. To stop GitHub events at once without a restart, pause the channel: Channels in the Console, or `hubzoid channels pause . github --expected-revision N`.
 
 ## Watching
 
