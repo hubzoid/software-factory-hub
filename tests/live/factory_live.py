@@ -179,7 +179,7 @@ def _repository_read(bare: Path, request) -> tuple[int, object] | None:
 # -- sandbox and station stand-ins ------------------------------------------------------------
 
 def _plan_for(message: str) -> dict:
-    if re.search(r"cent|round", message, re.I):
+    if re.search(r"\bcents?\b|\bround", message, re.I):
         return {
             "problem_statement": "total_with_tax rounds each line before adding them up, so some baskets are "
                                  "charged a cent too much. Three items at 0.10 with 5% tax charge 0.33 instead "
@@ -211,7 +211,7 @@ def _plan_for(message: str) -> dict:
 
 
 def _fix_files(message: str) -> dict[str, str]:
-    if re.search(r"cent|round", message, re.I):
+    if re.search(r"\bcents?\b|\bround", message, re.I):
         return {"invoice/totals.py": (HUB_ROOT / "fixtures" / "sample-fix" / "invoice" / "totals.py").read_text()}
     return {"README.md": (HUB_ROOT / "fixtures" / "sample-repo" / "README.md").read_text()
             + "\n## Reporting bugs\n\nPlease include the version you use and the steps to reproduce.\n"}
@@ -327,7 +327,7 @@ def install() -> None:
                 (path / rel).write_text(text)
             _git(path, "add", "-A")
             _git(path, "commit", "--quiet", "-m", "Cover the discounted basket the failing check reported" if repair
-                 else "Round invoice totals once, after tax" if re.search(r"cent|round", message, re.I)
+                 else "Round invoice totals once, after tax" if re.search(r"\bcents?\b|\bround", message, re.I)
                  else "Add a Reporting bugs section")
             head = _git(path, "rev-parse", "HEAD").strip()
             patch = _git(path, "format-patch", "--stdout", f"{box['commit']}..HEAD")

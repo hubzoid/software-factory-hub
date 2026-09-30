@@ -118,7 +118,7 @@ def _scope(r: Run) -> None:
                                                   "ceiling": item.route})
     r.settings = base["settings"]
     if not r.settings["FACTORY_INTAKE_ENABLED"]:
-        raise FactoryStop("intake_paused", "The factory is not taking new work right now.")
+        raise FactoryStop("intake_paused", "Intake is paused, so the factory is not starting new work.")
     fixed = base["fixed"]
     if fixed and fixed not in policy.route_ceiling(r.caller, r.request.trigger):
         raise FactoryStop("policy_denied", f"Route {fixed} is not available for this request.")

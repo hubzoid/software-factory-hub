@@ -29,7 +29,7 @@ REASONS = {
     "ci_attempts_exhausted": "Automated CI repair has made its attempts. A person takes over.",
     "fork_pull_request": "Pull requests from forks never get automated repair.",
     "ci_not_failing": "The checks are no longer failing on the current head.",
-    "intake_paused": "The factory is not taking new work. An administrator can turn intake back on.",
+    "intake_paused": "An administrator turns intake back on in Setup (FACTORY_INTAKE_ENABLED) and restarts the hub, then you ask again.",
     "push_rejected": "GitHub refused the push. Nothing was overwritten.",
     "policy_denied": "That action is not allowed for this kind of request.",
     "approval_denied": "The person who asked did not approve it.",
