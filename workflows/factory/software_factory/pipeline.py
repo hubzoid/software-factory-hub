@@ -619,7 +619,8 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
     body = evidence.pr_body(analysis=a, implementation=impl, review=review, subject_kind=r.request.subject.kind,
                             subject_number=r.request.subject.number, evidence_url=ev_url, cautions=cautions,
                             pushed_sha=pushed_sha, plan_digest=r.record.get("plan_digest"))
-    if pr_number is None:
+    opened = pr_number is None
+    if opened:
         from hubzoid.work_items.operations import OperationFailed
 
         title = (r.ground.get("subject") or {}).get("title") or c.summary
@@ -655,11 +656,19 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
     progress.record(pr_number=pr_number, pr_url=pr_url, evidence_url=ev_url)
     note = _brain_note(r, a, impl, review)
     look = "; ".join(x.strip().rstrip(".") for x in cautions + impl.known_limitations[:3]) or "nothing unusual"
-    text = (f"Draft pull request #{pr_number} is ready for a person to review: {pr_url}\n\n"
-            f"{a.problem_statement.strip()} The change is on {branch} at `{pushed_sha[:12]}`. The independent "
-            f"reviewer approved that exact commit, with {len(a.acceptance_criteria)} of "
-            f"{len(a.acceptance_criteria)} acceptance criteria passing. Check before marking it ready: {look}."
-            + (f"\n\nEvidence: {ev_url}" if ev_url else "") + note)
+    passing = (f"The independent reviewer approved that exact commit, with {len(a.acceptance_criteria)} of "
+               f"{len(a.acceptance_criteria)} acceptance criteria passing.")
+    if opened:
+        text = (f"Draft pull request #{pr_number} is ready for a person to review: {pr_url}\n\n"
+                f"{a.problem_statement.strip()} The change is on {branch} at `{pushed_sha[:12]}`. {passing} "
+                f"Check before marking it ready: {look}.")
+    else:
+        attempt = r.record.get("ci_attempt")
+        why = (f"CI fix attempt {attempt} of {r.settings['FACTORY_CI_ATTEMPTS']}" if attempt
+               else "The change you asked for")
+        text = (f"{why} is pushed to pull request #{pr_number}" + (f": {pr_url}" if pr_url else ".") + "\n\n"
+                f"The branch {branch} is now at `{pushed_sha[:12]}`. {passing} Check before it merges: {look}.")
+    text += (f"\n\nEvidence: {ev_url}" if ev_url else "") + note
     return _done(r, "delivered", text)
 
 

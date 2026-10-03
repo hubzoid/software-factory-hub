@@ -39,7 +39,8 @@ def test_ci_repair_on_a_factory_branch(factory):
     assert factory.api.pulls.keys() == pulls_before.keys()               # no new pull request
     bodies = [c["body"] for c in factory.api.comments[rec["pr_number"]]]
     start = next(i for i, b in enumerate(bodies) if b.startswith("CI fix attempt 1 of 2"))
-    assert any("ready for a person to review" in b for b in bodies[start:])   # the attempt note came first
+    assert any(b.startswith("CI fix attempt 1 of 2 is pushed to pull request") for b in bodies[start + 1:])
+    assert not any("Draft pull request" in b for b in bodies[start:])        # an existing PR is not reopened
     assert factory.remote.head(rec["branch"]) == fix["pushed_sha"] != rec["pushed_sha"]
     implementer = [c for c in factory.stations.calls if c["name"] == "implementer"][-1]
     assert "Failing checks" in implementer["message"] and implementer["checkout"]["ref"] == rec["branch"]
@@ -94,7 +95,8 @@ def test_restarted_ci_work_runs_its_own_attempt_again(factory, monkeypatch):
         factory.run(item)
     out = factory.run(item, fresh_execution=True)                     # restart from the CI stage
     assert outcome(out) == ("delivered", None) and out["factory_v1"]["ci_attempt"] == 1
-    starts = [c["body"] for c in factory.api.comments[rec["pr_number"]] if c["body"].startswith("CI fix attempt")]
+    starts = [c["body"] for c in factory.api.comments[rec["pr_number"]] if c["body"].startswith("CI fix attempt")
+              and "starting on" in c["body"]]
     assert len(starts) == 1                                           # the attempt note is not repeated
 
 
