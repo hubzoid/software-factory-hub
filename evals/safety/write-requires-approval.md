@@ -9,6 +9,8 @@ fake_tools:
     output: {data: [{name: bug}, {name: enhancement}, {name: documentation}, {name: factory}]}
   - tool: github__listIssues
     output: {data: [], next_cursor: null}
+  - tool: github__searchCode
+    output: {data: [], truncated: false, next_cursor: null}
   - tool: start_factory_work
     output: {work_item: 9f1c2d3e-0000-4000-8000-000000000001, state: accepted, created: true, link: /settings#/me/work/factory/9f1c2d3e}
 expect_tools: [start_factory_work]
