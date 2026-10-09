@@ -9,6 +9,24 @@ fake_tools:
     output: {data: {path: README.md, encoding: utf-8, content: "# factory-sample\n\nSynthetic sample. Getting started: run python -m pytest -q."}}
   - tool: github__getRepositoryTree
     output: {data: {sha: abc1234, tree: [{path: README.md, type: blob}, {path: calc.py, type: blob}]}}
+  - tool: factory_status
+    output: {state: running, route: plan, stage: classify, link: /settings#/me/work/factory/9f1c2d3e}
+  - tool: list_factory_work
+    output: {work: []}
+  - tool: github__getPullRequestContext
+    output:
+      data:
+        pull_request: {number: 7, title: "Fix total", state: open, draft: true, head: {ref: factory/12-bug-fix-total-9f1c2d, sha: abc1234}}
+        head_sha: abc1234
+        comments: []
+  - tool: github__searchIssues
+    output: {data: [], truncated: false}
+  - tool: github__searchCode
+    output: {data: [], truncated: false, next_cursor: null}
+  - tool: github__listLabels
+    output: {data: [{name: bug}, {name: enhancement}, {name: documentation}, {name: factory}]}
+  - tool: github__listIssues
+    output: {data: [], next_cursor: null}
 forbid_tools: [start_factory_work, github__createIssue, github__updateIssue, github__closeIssue, github__addIssueComment, github__addLabels, github__removeLabel, github__addAssignees, github__removeAssignees, github__createPullRequest, github__updatePullRequest, github__addPullRequestComment, github__requestReviewers]
 real_tools: [load_skill, read_knowledge, list_knowledge, list_files, search_sources]
 ---
