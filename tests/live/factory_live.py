@@ -361,3 +361,10 @@ def install() -> None:
     sandbox_service.stop = lambda hub_dir, sid, reason="idle": _save_box(sid, state="stopped")
     sandbox_service.attach = lambda hub_dir, sid: {"id": sid}
     sandbox_service.reap = lambda hub_dir, dry_run=True: {"stand_in": True, "removed": []}
+    # Doctor sees the stand-in for what it is: a labelled warning, never a pass.
+    sandbox_service.doctor = lambda hub_dir: {
+        "valid": True, "standin": True, "providers": {}, "profiles": {},
+        "checks": [{"id": "provider:standin", "status": "warn", "recovery_action":
+                    "On a machine with a Docker engine, unset FACTORY_LIVE_SANDBOX and run hubzoid sandbox doctor .",
+                    "summary": STANDIN + "the analyst, implementer and reviewer are scripted on host clones made "
+                               "by test code. Not a sandbox."}]}

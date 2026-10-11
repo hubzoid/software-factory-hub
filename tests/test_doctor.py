@@ -62,3 +62,31 @@ def test_token_mode_says_whether_deliveries_are_verified(factory_hub, conn, webh
 def test_channels_row_names_no_unsupported_tracker(factory_hub, conn):
     row = _checks().channels(_context(factory_hub))
     assert row["status"] == "ok" and "ClickUp" not in row["summary"]
+
+
+@pytest.mark.parametrize("report,status,words", [
+    ({"valid": False, "checks": [{"id": "provider:docker", "status": "fail", "summary": "Docker is not reachable.",
+                                  "recovery_action": "Start Docker, then run doctor again."},
+                                 {"id": "profile:factory", "status": "fail", "summary": "Docker is not reachable.",
+                                  "recovery_action": "Correct the profile and validate again."}]},
+     "fail", "Docker is not reachable. The analyst"),
+    ({"valid": True, "checks": [{"id": "provider:docker", "status": "pass", "summary": "Docker 27 reachable."},
+                                {"id": "profile:factory", "status": "warn", "summary": "Its image is not prepared.",
+                                 "recovery_action": "Run `hubzoid sandbox profiles prepare . factory`."}]},
+     "warn", "not prepared"),
+    ({"valid": True, "checks": [{"id": "provider:docker", "status": "pass", "summary": "Docker 27 reachable."},
+                                {"id": "profile:factory", "status": "pass", "summary": "valid."}]},
+     "ok", "Docker 27 reachable."),
+])
+def test_sandbox_row_follows_the_sdk_sandbox_doctor(factory_hub, monkeypatch, report, status, words):
+    from hubzoid.sandbox import config as sandbox_config
+    from hubzoid.sandbox import service as sandbox_service
+
+    monkeypatch.setattr(sandbox_config, "check_profile", lambda *a, **k: None)
+    monkeypatch.setattr(sandbox_service, "doctor", lambda hub_dir: report)
+    ctx = _context(factory_hub)
+    ctx["settings"]["FACTORY_SANDBOX_PROFILE"] = "factory"
+    row = _checks().sandbox(ctx)
+    assert row["status"] == status and words in row["summary"], row
+    if status == "fail":
+        assert row["recovery"] == "Start Docker, then run doctor again."

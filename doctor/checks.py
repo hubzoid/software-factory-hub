@@ -140,8 +140,9 @@ def stations(context) -> dict:
 
 
 def sandbox(context) -> dict:
-    """The sandbox profile is valid and Docker answers. Hubzoid never falls
-    back to the host shell."""
+    """The sandbox profile is valid and the SDK's sandbox doctor passes
+    (config, provider, runtime, prepared image). Hubzoid never falls back to
+    the host shell."""
     hub_dir = _hub(context)
     profile = context["settings"].get("FACTORY_SANDBOX_PROFILE")
     try:
@@ -151,20 +152,26 @@ def sandbox(context) -> dict:
     except Exception as exc:  # noqa: BLE001
         return _row("fail", f"Sandbox profile {profile!r}: {getattr(exc, 'message', exc)}",
                     f"Fix sandboxes/{profile}.yaml, then hubzoid sandbox profiles validate .")
-    docker = shutil.which("docker")
-    if not docker:
-        return _row("fail", "Docker is not installed, so the analyst, implementer and reviewer cannot run.",
-                    "Install a Docker engine (Docker Desktop, Colima or OrbStack), then hubzoid sandbox doctor .")
     try:
-        res = subprocess.run([docker, "info", "--format", "{{.ServerVersion}}"], capture_output=True, text=True,
-                             timeout=15)
-    except subprocess.TimeoutExpired:
-        res = None
-    if res is None or res.returncode != 0:
-        return _row("fail", "Docker is installed but its engine is not running.",
-                    "Start Docker, then hubzoid sandbox doctor . and hubzoid sandbox profiles prepare . " + profile)
-    return _row("ok", f"Sandbox profile {profile} is valid. Docker {res.stdout.strip()} answers. Agent commands run "
-                      "offline after setup.")
+        from hubzoid.sandbox import service as sandbox_service
+
+        report = sandbox_service.doctor(hub_dir)
+    except Exception as exc:  # noqa: BLE001
+        return _row("fail", f"The sandbox doctor could not run: {getattr(exc, 'message', exc)}",
+                    "hubzoid sandbox doctor .")
+    checks = report.get("checks") or []
+    failed = [c for c in checks if c.get("status") == "fail"]
+    if failed:
+        said = " ".join(dict.fromkeys(c["summary"] for c in failed))         # one engine error can fail two checks
+        return _row("fail", said + " The analyst, implementer and reviewer cannot run.",
+                    failed[0].get("recovery_action") or "hubzoid sandbox doctor .")
+    warned = [c for c in checks if c.get("status") == "warn"]
+    if warned:
+        return _row("warn", " ".join(dict.fromkeys(c["summary"] for c in warned)),
+                    warned[0].get("recovery_action") or f"hubzoid sandbox profiles prepare . {profile}")
+    found = " ".join(c["summary"] for c in checks if str(c.get("id", "")).startswith("provider:"))
+    return _row("ok", f"Sandbox profile {profile} is valid and prepared. {found} Agent commands run offline after "
+                      "setup.".replace("  ", " "))
 
 
 def write_modes(context) -> dict:
