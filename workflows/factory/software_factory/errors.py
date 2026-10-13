@@ -39,8 +39,8 @@ REASONS = {
     "content_too_large": "The request or a document is larger than the factory accepts.",
     "review_evidence_invalid": "The reviewer changed files while checking, so its result does not prove the "
                                "published commit. Ask again.",
-    "station_failed": "A station failed twice. Check the runtime and the sandbox in Run checks, then ask again or "
-                      "restart the work item.",
+    "station_failed": "A station could not finish, even after its retry. Check the runtime and the sandbox in "
+                      "Run checks, then ask again.",
     "pull_request_unconfirmed": "Check GitHub for a pull request from the branch. If there is none, open one from "
                                 "the branch or ask again.",
 }
