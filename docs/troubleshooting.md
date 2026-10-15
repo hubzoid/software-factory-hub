@@ -20,7 +20,7 @@ Every stop says why and what to do next, on the issue or in `factory_status`. Th
 | `policy_denied` | The action is not allowed for this kind of request (for example a pull request from an unlinked mention) | Link your GitHub account in Hubzoid, or use the label |
 | `approval_denied` | The person who asked said no | Nothing was sent |
 | `repository_unavailable` | `FACTORY_REPO` is not in the GitHub connection, or a write targeted another repository | Fix the setting or the App installation |
-| `intake_paused` | `FACTORY_INTAKE_ENABLED` is false | Turn it back on |
+| `intake_paused` | `FACTORY_INTAKE_ENABLED` is false | Turn it back on in Setup and restart the hub (settings apply on restart) |
 | `stopped_by_requester` | The requester wrote "stop" | Nothing more runs |
 
 Codes from Hubzoid itself:
@@ -31,7 +31,7 @@ Codes from Hubzoid itself:
 | `setup_failed` | Read the output tail, fix `setup.command` in `sandboxes/factory.yaml` or the lockfile |
 | `image_unavailable` | `hubzoid sandbox profiles prepare . factory` |
 | `sandbox_lost` | The sandbox disappeared. Retry the station call to start a fresh one |
-| `retry_exhausted` | A station failed twice. Check the call with `hubzoid stations calls show`, fix the cause, restart the work |
+| `station_failed`, `retry_exhausted` | A station could not finish, even after its retry, and the work stopped with the reason on its thread. Check the call with `hubzoid stations calls show`, fix the cause (often the runtime or the sandbox, see Run checks), then ask again. Restarting the same work replays the failed call |
 | `definition_changed` | Code changed while the work waited. Check, then `hubzoid work-items restart` |
 | `pr_update_requires_approval` | Set `github.pr_update: approve` in `work-items.yaml` |
 | Ambiguous operation | A write may or may not have happened. The requester decides done, retry or abandon in Work items. An empty search is not proof. An interrupted pull request creation settles itself by finding the pull request for its branch |

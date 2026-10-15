@@ -19,7 +19,7 @@ Every channel starts the same durable `factory` work item. The trigger decides t
 Two ways to connect (SDK `docs/channels/github.md`):
 
 - **Your own GitHub App** for a hosted hub. Created through GitHub's manifest flow, owned by your account or organization, with metadata read, contents write, issues write, pull requests write, checks read and actions read. Each call uses a token narrowed to one repository and the permissions that call needs. Webhooks are verified with SHA-256 HMAC.
-- **A personal token** for a laptop. Replies use your account and pushes use the whole token, so use a fine-grained token limited to the scratch repository. Webhooks are not verified in this mode: use manual intake (`hubzoid channels github intake . github --url <issue> --task "..."`) or a forwarding tool.
+- **A personal token** for a laptop. Replies use your account and pushes use the whole token, so use a fine-grained token limited to the scratch repository. A laptop has no public address, so GitHub cannot deliver webhooks to it: use manual intake (`hubzoid channels github intake . github --url <issue> --task "..."`), or a forwarding tool with `webhook_secret_ref` set, in which case each delivery is verified with SHA-256 HMAC as in App mode.
 
 `channels/github.yaml` must start the factory and set the routes:
 
