@@ -1,0 +1,25 @@
+# The GitHub connection for a local run against the GitHub stand-in (token mode).
+# setup.sh fills in HUB_ID. Never use this file with a real account.
+version: 1
+id: github
+provider: github
+enabled: true
+workflow: factory
+run_as: workflow
+allowed_groups: [engineering]
+progress: true
+provider_config:
+  mode: pat
+  owner: {type: user, login: factory-demo, id: 4242}
+  repositories:
+  - {id: 2001, full_name: example-co/widget}
+  token_ref: secret:channel/HUB_ID/github/token
+  webhook_secret_ref: secret:channel/HUB_ID/github/webhook-secret
+  bot_name: factory-demo
+  rules:
+    mentions: true
+    label: factory
+    pr_opened: true
+    ci_failure: true
+    routes: {mention: request, review_mention: request, label: implement, pull_request: summarize,
+             ci_failure: revise}
