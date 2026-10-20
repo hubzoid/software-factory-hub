@@ -1,10 +1,10 @@
 # Attribution
 
-The Software Factory is a Hubzoid port of eve's Software Factory template ("Foreman", MIT, Copyright (c) 2026 Vercel, Inc.). Foreman is the authority for stations and behaviour (founder decisions B023 and B027). The MIT licence is in `LICENSES/MIT-foreman.txt`.
+The Software Factory is a Hubzoid port of Vercel's Software Factory template (MIT, Copyright (c) 2026 Vercel, Inc.). The upstream template is the authority for stations and behaviour (founder decisions B023 and B027). The MIT licence is in `LICENSES/MIT-vercel.txt`.
 
-## Files ported from Foreman
+## Files ported from the upstream template
 
-| This hub | Foreman source | How |
+| This hub | Upstream source | How |
 |---|---|---|
 | `agents/classifier/AGENTS.md` | `agent/subagents/classifier/instructions.md` | Text kept, data-not-instructions rule added |
 | `agents/researcher/AGENTS.md` | `agent/subagents/researcher/instructions.md` | Text kept, tools renamed (`web_search`, `http_get`, `save_handoff`) |
@@ -19,7 +19,7 @@ The Software Factory is a Hubzoid port of eve's Software Factory template ("Fore
 | `skills/writing-quality/` | `agent/skills/writing-quality/` | Copied, `name:` added |
 | `skills/triaging-issues/` | `agent/skills/triaging-issues/` | Copied, one sentence adapted |
 | `skills/github-linear-bridging/` | `agent/skills/github-linear-bridging/` | Copied, preferences are the person's own notes |
-| `evals/` and `tests/integration/test_foreman_evals.py` | `evals/*.eval.ts` | The twelve evals ported (see `docs/evals.md`) |
+| `evals/` and `tests/integration/test_pipeline.py` | `evals/*.eval.ts` | The twelve evals ported (see `docs/evals.md`) |
 
 ## Patterns from other references (no code copied)
 

@@ -15,7 +15,7 @@ This module then:
 5. records the pushed SHA, the owning work item and later the pull request,
    so CI repairs and later revisions can prove the branch is the factory's.
 
-A branch name prefix alone grants nothing (Foreman's CI trusted the prefix).
+A branch name prefix alone grants nothing (the upstream template's CI trusted the prefix).
 """
 from __future__ import annotations
 

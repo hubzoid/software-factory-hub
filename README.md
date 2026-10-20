@@ -4,9 +4,9 @@ A ready-made Hubzoid hub that turns engineering requests into reviewed draft pul
 
 > Qualification: the real-provider matrix is tracked in [docs/qualification.md](docs/qualification.md). Scripted tests are contract evidence, not a live hosting/model claim.
 
-> The public name is still open: eve's template is also called "Software Factory". This draft keeps the name until a founder decides.
+> The public name is still open: the upstream template is also called "Software Factory". This draft keeps the name until a founder decides.
 
-It is a Hubzoid port of eve's Software Factory template ("Foreman", MIT), with patterns from LangChain open-swe and github/gh-aw. See [ATTRIBUTION.md](ATTRIBUTION.md).
+It is a Hubzoid port of Vercel's Software Factory template (MIT), with patterns from LangChain open-swe and github/gh-aw. See [ATTRIBUTION.md](ATTRIBUTION.md).
 
 ## What it does
 
@@ -98,6 +98,6 @@ docs/                          settings, channels, architecture, security, opera
 
 ## Licence
 
-Apache-2.0. Portions ported from Foreman are MIT, Copyright (c) 2026 Vercel, Inc. ([LICENSES/MIT-foreman.txt](LICENSES/MIT-foreman.txt)).
+Apache-2.0. Portions ported from the upstream template are MIT, Copyright (c) 2026 Vercel, Inc. ([LICENSES/MIT-vercel.txt](LICENSES/MIT-vercel.txt)).
 
 Built on [Hubzoid](https://github.com/hubzoid/hubzoid).

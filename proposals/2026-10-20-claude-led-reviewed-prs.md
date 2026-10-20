@@ -15,7 +15,7 @@ The reported 348 passing tests use synthetic dependencies. `tests/live/README.md
 
 ## Why now
 
-Software Factory is an approved ready-made hub. B023 and B027 retain Foreman's stations and behavior; B042 names LangChain open-swe as the second reference and gh-aw for the write-token boundary. B037 requires useful operation with one installed Claude or Codex runtime. B038 requires thin adapters around SDK capabilities, and B042 forbids a fourth repository or package.
+Software Factory is an approved ready-made hub. B023 and B027 retain the upstream template's stations and behavior; B042 names LangChain open-swe as the second reference and gh-aw for the write-token boundary. B037 requires useful operation with one installed Claude or Codex runtime. B038 requires thin adapters around SDK capabilities, and B042 forbids a fourth repository or package.
 
 The need is a repeatable path through existing components: shared context, file configuration, customization, visible first value, proven actions, assistant-led setup and explicit tool access.
 
@@ -82,7 +82,7 @@ Settings cover repository, channels, routing, concurrency, review depth, action 
 | `channels/`, sandbox profiles, tests/evals/demo | Connection-safe configuration, real journeys and labelled fixtures |
 | Hubzoid SDK | Only missing generic must-haves: delegated identity/human-confirmation separation, proposed-change storage and activation, scoped grants, or demonstrated artifact/connection/station/broker/settings gaps |
 
-Required SDK baseline is `14e1a59b`. Testing pins an immutable reviewed commit; promoted installation ships against a qualified tagged SDK release. SDK gaps get separate must-have PRs for human review and merge. Prefer native runtime approval, sessions and delegation; no new framework, package, repository, global memory system or UI mode. Product code stays Apache-2.0; retain Foreman MIT attribution.
+Required SDK baseline is `14e1a59b`. Testing pins an immutable reviewed commit; promoted installation ships against a qualified tagged SDK release. SDK gaps get separate must-have PRs for human review and merge. Prefer native runtime approval, sessions and delegation; no new framework, package, repository, global memory system or UI mode. Product code stays Apache-2.0; retain the upstream MIT attribution.
 
 ## Required qualification coverage
 

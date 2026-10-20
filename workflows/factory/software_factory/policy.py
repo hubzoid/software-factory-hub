@@ -1,11 +1,11 @@
 """Who may make the factory do what: caller classes and the action matrix.
 
-Foreman's GitHub policies (``agent/lib/github/approval.ts``, MIT, Vercel) as
+The upstream template's GitHub policies (``agent/lib/github/approval.ts``, MIT, Vercel) as
 data, with the named fixes from HUB-6 section 6:
 
 * a pull request summary session (P) can only post its own origin reply;
 * a state change bundled with other issue fields must pass both policies;
-* unattended label work (A) writes only on its intake issue, except Foreman's
+* unattended label work (A) writes only on its intake issue, except the upstream template's
   dedupe close, which stays limited to issues in the same repository;
 * every pull request update waits for the requester, never an administrator.
 
@@ -24,12 +24,12 @@ CallerClass = Literal["T", "U", "A", "C", "P"]
 CALLERS: tuple[str, ...] = ("T", "U", "A", "C", "P")
 Decision = Literal["allow", "approval", "deny"]
 
-#: The local machine account when sign-in is off (Foreman's dev TUI: writes
+#: The local machine account when sign-in is off (the upstream template's dev TUI: writes
 #: wait for the person's approval).
 LOCAL_ACCOUNT = "admin@localhost"
 
 
-# -- the 31 Foreman GitHub tools (agent/extensions/github.ts:40-70) -----------------------
+# -- the 31 upstream GitHub tools (agent/extensions/github.ts:40-70) -----------------------
 
 READ = "read"
 #: kind of each tool, which picks its row in the matrix
@@ -54,7 +54,7 @@ GITHUB_TOOLS: dict[str, str] = {
     "requestReviewers": "other_write",
     "listCheckRuns": READ, "getCiFailureContext": READ,
 }
-#: Tools Foreman deliberately leaves out and the factory never offers.
+#: Tools the upstream template deliberately leaves out and the factory never offers.
 ABSENT = ("mergePullRequest", "enablePullRequestAutoMerge", "createRelease", "deleteRepository",
           "createOrUpdateFileContents", "rerunWorkflow", "updateRepository")
 
@@ -99,7 +99,7 @@ class Verdict:
 def kind_of(tool: str, arguments: dict | None = None) -> str:
     """The matrix row for one GitHub call. `updateIssue` is classified by its
     whole mutation: a state change smuggled beside labels or a title must pass
-    both rows (the mixed-field bypass Foreman's updateIssuePolicy allowed)."""
+    both rows (the mixed-field bypass the upstream template's updateIssuePolicy allowed)."""
     if tool not in GITHUB_TOOLS:
         raise KeyError(f"{tool!r} is not one of the factory's GitHub tools")
     kind = GITHUB_TOOLS[tool]

@@ -1,7 +1,7 @@
 """Admission for the revise route: red CI and requested changes on a factory
 pull request.
 
-Foreman's CI loop (``agent/channels/github.ts:102-125, 201-221``, MIT,
+The upstream template's CI loop (``agent/channels/github.ts:102-125, 201-221``, MIT,
 Vercel) trusts the branch prefix and counts its own comments, judged by the
 model. HUB-6 names both as weaknesses. Here a repair needs, freshly checked:
 

@@ -3,7 +3,7 @@
 On a channel (a GitHub issue, a Slack thread, a Linear session) a short note
 goes to the work's own thread after each intermediate station, keyed so a
 replay never posts twice. The last station's note is the wrap-up itself
-(Foreman's rule). Chat, MCP and API work has no thread: progress is kept in
+(the upstream template's rule). Chat, MCP and API work has no thread: progress is kept in
 the factory's record, which the chat tools and the Console read.
 """
 from __future__ import annotations

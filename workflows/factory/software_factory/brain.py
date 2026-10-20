@@ -1,6 +1,6 @@
 """The factory brain: durable, curated facts about one repository.
 
-Foreman keeps it in a Blob document overwritten whole
+The upstream template keeps it in a Blob document overwritten whole
 (``agent/lib/factory-brain.ts``, ``update_factory_brain.ts``, MIT, Vercel).
 Here it is a hub file, ``knowledge/factory-brain/<owner>-<repo>.md``, changed
 only through Hubzoid's reviewed hub changes (HUB-92): a proposal with the

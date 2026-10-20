@@ -1,4 +1,4 @@
-"""The caller matrix and the 31 Foreman GitHub tools (HUB-6 section 6)."""
+"""The caller matrix and the 31 upstream GitHub tools (HUB-6 section 6)."""
 import pytest
 
 from software_factory import policy
@@ -58,7 +58,7 @@ def test_unattended_writes_stay_on_the_intake_issue():
 
 
 def test_mixed_issue_update_checks_every_field():
-    # A state change alone passes for A (Foreman's dedupe), but smuggling a title beside it does not.
+    # A state change alone passes for A (the upstream template's dedupe), but smuggling a title beside it does not.
     assert policy.decide("A", "updateIssue", arguments={"number": 5, "state": "closed"}).allowed
     mixed = policy.decide("A", "updateIssue", arguments={"number": 5, "state": "closed", "title": "x"})
     assert mixed.decision == "deny"

@@ -1,4 +1,4 @@
-"""Station results: Foreman's closed schemas, with the Hubzoid additions."""
+"""Station results: the upstream template's closed schemas, with the Hubzoid additions."""
 import json
 from pathlib import Path
 
@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from software_factory import schemas
 
 HUB = Path(__file__).resolve().parents[1]
-FOREMAN_FIELDS = {
+UPSTREAM_FIELDS = {
     "classifier": {"type", "priority", "complexity", "affected_area", "actionable", "needs_clarification",
                    "questions", "summary"},
     "researcher": {"summary", "findings", "gaps", "handoff_id"},
@@ -24,7 +24,7 @@ FOREMAN_FIELDS = {
 def test_files_match_the_models(name):
     on_disk = json.loads((HUB / "agents" / name / "schemas" / "result.json").read_text())
     assert on_disk == schemas.json_schema(schemas.STATIONS[name])
-    assert set(on_disk["properties"]) == FOREMAN_FIELDS[name]
+    assert set(on_disk["properties"]) == UPSTREAM_FIELDS[name]
 
 
 def _closed(node):

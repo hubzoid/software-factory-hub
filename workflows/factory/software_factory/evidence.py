@@ -1,6 +1,6 @@
 """Evidence, the pull request body and the wrap-up.
 
-The pull request body follows Foreman's delivery rule
+The pull request body follows the upstream template's delivery rule
 (``agent/instructions.ts:63-69``, MIT, Vercel): the problem, the approach
 and why, the acceptance criteria as a checklist with the reviewer's result for
 each, the verification commands and results, deviations, and ``Closes #N``

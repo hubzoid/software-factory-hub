@@ -146,7 +146,7 @@ def unattended(requester: str) -> bool:
 def verified(request: Request, requester: str) -> bool:
     """Whether the person behind the request is verified beyond the local
     machine account: a linked channel identity, or a signed-in Hubzoid
-    account. The local account with sign-in off is Foreman's dev TUI."""
+    account. The local account with sign-in off is the upstream template's dev TUI."""
     from .policy import LOCAL_ACCOUNT
 
     return bool(requester) and requester != LOCAL_ACCOUNT and not unattended(requester)

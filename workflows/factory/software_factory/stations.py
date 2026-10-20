@@ -1,13 +1,13 @@
 """Calling the five stations, and the messages they get.
 
-Every station starts fresh and sees only its message (eve's isolation, the
-SDK's ``isolated: true``). So each message is self-contained (Foreman rule 1):
+Every station starts fresh and sees only its message (the upstream isolation
+model, the SDK's ``isolated: true``). So each message is self-contained (upstream rule 1):
 the work item verbatim, every earlier result the station needs, long
 documents by handoff id only (rule 2), and the factory brain woven in. Data
 (issue text, comments, research, repository files) is marked as data.
 
 On a failed or malformed result the workflow directs exactly one retry with a
-clarification (Foreman rule 5, the SDK's ``retry_station``). The SDK resumes a
+clarification (upstream rule 5, the SDK's ``retry_station``). The SDK resumes a
 crashed call once on its own, separately, without spending that retry.
 """
 from __future__ import annotations

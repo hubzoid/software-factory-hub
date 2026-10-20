@@ -1,6 +1,6 @@
 """The five station results and the factory record, as closed schemas.
 
-Ported from Foreman's ``agent/lib/stations/schemas.ts`` (MIT, Vercel), field
+Ported from the upstream template's ``agent/lib/stations/schemas.ts`` (MIT, Vercel), field
 for field, with three Hubzoid changes:
 
 * handoffs replace artifacts, so ``artifact_id`` is ``handoff_id``;

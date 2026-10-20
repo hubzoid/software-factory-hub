@@ -1,13 +1,13 @@
 """The factory pipeline: one durable work item from request to outcome.
 
-Foreman's orchestrator (``agent/instructions.ts``, MIT, Vercel) is a model
+The upstream template's orchestrator (``agent/instructions.ts``, MIT, Vercel) is a model
 that calls station tools. Here the orchestration is workflow code on the
 SDK's durable work items, so each step survives a restart and runs once:
 
     scope -> ground -> classify -> [label] -> [research] -> analyze
           -> [plan_review] -> implement -> publish -> review -> deliver
 
-with Foreman's rules kept: stations strictly in order, never skipped, the
+with the upstream template's rules kept: stations strictly in order, never skipped, the
 implementer never judges its own work, one clarified retry per station,
 progress notes after intermediate stations, labels from the repository's own
 vocabulary, at most two revision cycles, a reviewed draft pull request and
@@ -158,7 +158,7 @@ def _drain(r: Run) -> None:
 
 
 def _ground(r: Run, *, pr_context: bool = False) -> None:
-    """Read the work item in full before routing it (Foreman section 2):
+    """Read the work item in full before routing it (upstream section 2):
     the issue or pull request with its comments, the label vocabulary and
     candidate duplicates. Everything read is data."""
     req = r.request
@@ -264,7 +264,7 @@ def _classify(r: Run) -> Classification:
         c, _ = stations.call("classifier", stations.classifier_message(r.request, r.ground), stage=routes.CLASSIFY)
     if c.needs_clarification:
         if r.attended:
-            # Attended: ask the person and wait (Foreman section 4), then classify again.
+            # Attended: ask the person and wait (upstream section 4), then classify again.
             question = "The factory needs a few answers before it continues:\n\n" + "\n".join(
                 f"- {q}" for q in c.questions or ["What exactly should change?"])
             progress.reply(question, key="clarify:1", kind="question")
@@ -292,7 +292,7 @@ class LabelPick(BaseModel):
 
 def _label(r: Run, c: Classification) -> list[str]:
     """Mirror the classification as labels, the fewest from the repository's
-    own vocabulary, never an invented one (Foreman rule 7, triaging-issues).
+    own vocabulary, never an invented one (upstream rule 7, triaging-issues).
     The vocabulary was read in the ground stage, before any label write."""
     if r.request.subject.kind != "github_issue" or not r.request.subject.number:
         return []
@@ -326,7 +326,7 @@ class ResearchNeed(BaseModel):
 
 
 def _research(r: Run, c: Classification) -> Research | None:
-    """Research only when the item turns on an outside fact (Foreman section 5)."""
+    """Research only when the item turns on an outside fact (upstream section 5)."""
     need = hub.call_llm(
         "Does planning this work item depend on a fact the repository and its issues will not hold, such as an "
         "upstream bug, a library version, a standard or a claim that needs checking on the web? If so, write the "
@@ -339,7 +339,7 @@ def _research(r: Run, c: Classification) -> Research | None:
         return None
     res, _ = stations.call("researcher", stations.researcher_message(r.request, r.ground, c, need.question),
                            stage=routes.RESEARCH)
-    # Only findings with real sources go forward (Foreman section 5).
+    # Only findings with real sources go forward (upstream section 5).
     res = res.model_copy(update={"findings": [f for f in res.findings if all(s.url.startswith(("http://", "https://"))
                                                                               for s in f.sources)]})
     r.record["research"] = res.model_dump()
@@ -524,7 +524,7 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
                       owner_item: str, ci_context=None, first_revision: int = 1, pr_number: int | None = None,
                       findings: list[str] | None = None) -> dict:
     """Implement, publish, review, and revise on request_changes, at most
-    FACTORY_REVIEW_CYCLES times (Foreman section 6). Then deliver."""
+    FACTORY_REVIEW_CYCLES times (upstream section 6). Then deliver."""
     cycles = r.settings["FACTORY_REVIEW_CYCLES"]
     brain_text = r.ground.get("brain") or ""
     previous: Implementation | None = None
@@ -757,7 +757,7 @@ def _revise(r: Run) -> dict:
 
 
 def _summarize(r: Run) -> dict:
-    """One orientation comment for reviewers of a new pull request (Foreman's
+    """One orientation comment for reviewers of a new pull request (the upstream template's
     PR_SUMMARY_TASK). A summary, not a review. The only write is the reply on
     that pull request, which the channel posts."""
     text = hub.call_agent(

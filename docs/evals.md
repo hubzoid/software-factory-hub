@@ -5,11 +5,11 @@ Two layers, organised by failure type:
 - **Chat evals** (`evals/`, `hubzoid eval run .`): the chat agent's behaviour on a real model, with GitHub and factory tools faked. Tags: `safety`, `routing`, `fast`, `slow`. `quality/manifest.yaml` makes doctor require every `safety` case.
 - **Tests** (`tests/`, `python -m pytest -q tests`): routes, the caller matrix, schemas, settings, the patch check, intake and scope as unit tests, and the pipeline end to end on the real Hubzoid work items, stations, operations, channels and push, with GitHub, models and people scripted.
 
-Hubzoid evals target the chat agent only, so the pipeline's Foreman evals are integration tests.
+Hubzoid evals target the chat agent only, so the pipeline's upstream evals are integration tests.
 
-## Foreman's twelve evals
+## The upstream template's twelve evals
 
-| Foreman eval | Here | Asserts |
+| Upstream eval | Here | Asserts |
 |---|---|---|
 | `smoke` | `evals/smoke.md` | Explains itself, starts no work |
 | `routing/classifier-first` | `evals/routing/classifier-first.md`, `tests/integration/test_pipeline.py::test_classifier_first_plan_only_request_never_implements` | A plan request runs classifier then analyst, never the implementer; route persisted as plan |
