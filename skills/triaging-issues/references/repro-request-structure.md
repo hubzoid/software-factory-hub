@@ -11,12 +11,14 @@ Four parts, in order, rarely more than six or seven sentences total:
 3. Ask for the smallest actionable set, as a list. Version, minimal steps or repro, expected versus actual. Add environment only when it plausibly matters (OS, browser, runtime).
 4. Say what happens next once the details arrive.
 
+
 ## What to ask for
 
 - The exact version they're running, not "latest".
 - The smallest set of steps that shows the problem, or a link to a minimal repro repository or sandbox.
 - What they expected to happen and what actually happened, verbatim errors included.
 - Whether it worked on an earlier version, if the report smells like a regression.
+
 
 Ask specific yes-or-no or either-or questions where you can. "Does this still happen with caching disabled?" moves the issue; "can you share more context?" doesn't.
 
@@ -25,7 +27,8 @@ Ask specific yes-or-no or either-or questions where you can. "Does this still ha
 - A checklist longer than the reporter's original issue.
 - Asking for things the report already contains. Re-read before asking.
 - Template language that ignores their specifics. If the comment would fit any issue in the tracker, rewrite it.
-- Blame or doubt ("works fine for me", "are you sure you configured it right"). Assume the report is honest and incomplete.
+- Blame or doubt ("works fine for me", "are you sure you configured it right"), assume the report is honest and incomplete.
+
 
 ## Example: bug report with no version or steps
 

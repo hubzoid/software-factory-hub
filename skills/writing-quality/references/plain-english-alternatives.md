@@ -1,6 +1,7 @@
 # Plain English Alternatives
  
 Replace complex or pompous words with plain English alternatives.
+
  
 ---
  
@@ -50,6 +51,7 @@ Replace complex or pompous words with plain English alternatives.
 | by means of | by |
  
 ---
+
  
 ## C
  
@@ -77,6 +79,7 @@ Replace complex or pompous words with plain English alternatives.
 | currently | now |
  
 ---
+
  
 ## D
  
@@ -328,6 +331,7 @@ Replace complex or pompous words with plain English alternatives.
 | utilise | use |
  
 ---
+
  
 ## V-Z
  

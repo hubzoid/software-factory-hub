@@ -9,6 +9,7 @@ Words, phrases, and punctuation patterns commonly associated with AI-generated t
 **The em dash (—) has become one of the most reliable markers of AI-generated content.**
  
 Em dashes are longer than hyphens (-) and are used for emphasis, interruptions, or parenthetical information. While they have legitimate uses in writing, AI models drastically overuse them.
+
  
 ### Why Em Dashes Signal AI Writing
 - AI models were trained on edited books, academic papers, and style guides where em dashes appear frequently
@@ -22,6 +23,7 @@ Em dashes are longer than hyphens (-) and are used for emphasis, interruptions, 
 | This approach—unlike traditional methods—allows... | This approach, unlike traditional methods, allows... |
 | The study found—as expected—that... | The study found, as expected, that... |
 | Communication skills—both written and verbal—are essential | Communication skills (both written and verbal) are essential |
+
  
 ### Guidelines
 - Use commas for most parenthetical information
@@ -106,7 +108,7 @@ Em dashes are longer than hyphens (-) and are used for emphasis, interruptions, 
 - "That being said..."
 - "With that in mind..."
 - "It's worth mentioning that..."
-- "At its core..."
+- "At its core.."
 - "To put it simply..."
 - "In essence..."
 - "This begs the question..."

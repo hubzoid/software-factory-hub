@@ -5,8 +5,8 @@ Licensed under the Apache License, Version 2.0 (LICENSE).
 
 This hub ports instructions, schemas, skills and behaviour from Vercel's Software
 Factory template, Copyright (c) 2026 Vercel, Inc., under the MIT
-License. The full MIT licence text is in LICENSES/MIT-vercel.txt. Ported files
-are listed in ATTRIBUTION.md.
+License. The full MIT licence text is in LICENSES/MIT-vercel.txt. Attribution
+is summarized in ATTRIBUTION.md.
 
 It also follows design patterns (not code) from:
 - LangChain open-swe (MIT): deterministic thread identity, follow-up messages
