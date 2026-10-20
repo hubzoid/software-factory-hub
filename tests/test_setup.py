@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -84,10 +85,14 @@ def test_setup_commands_exist_in_the_selected_sdk(command, flags):
     from typer.testing import CliRunner
     from hubzoid.cli import app
 
-    result = CliRunner().invoke(app, [*command, "--help"], color=False)
+    # Rich forces colour and terminal width under GitHub Actions; read plain, wide help.
+    env = {"NO_COLOR": "1", "TERM": "dumb", "COLUMNS": "200", "GITHUB_ACTIONS": "", "FORCE_COLOR": "",
+           "_TYPER_FORCE_DISABLE_TERMINAL": "1"}
+    result = CliRunner(env=env).invoke(app, [*command, "--help"], color=False)
     assert result.exit_code == 0, result.output
+    output = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", result.output)
     for flag in flags:
-        assert flag in result.output, result.output
+        assert flag in output, output
 
 
 @pytest.mark.slow
