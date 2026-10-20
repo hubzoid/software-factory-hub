@@ -107,19 +107,21 @@ def work_item_block(request, ground: dict) -> str:
     out = "\n".join(parts)
     out += _data("Subject", ground.get("subject_text"))
     out += _data("Context from the requester's channel", ground.get("channel_context"))
+    out += _data("Approved Hub context revision", ground.get("context_revision"))
     out += _data("Follow-up messages from the requester", ground.get("followups"))
     return out
 
 
 def classifier_message(request, ground: dict, answers: str | None = None) -> str:
-    msg = work_item_block(request, ground)
+    msg = work_item_block(request, ground) + (ground.get("brain") or "")
     if answers:
         msg += _data("Answers to the clarifying questions, from the requester", answers)
     return msg + "\n\n## Task\n\nClassify this work item."
 
 
 def researcher_message(request, ground: dict, classification, question: str) -> str:
-    return (work_item_block(request, ground) + _data("Classification", classification.model_dump())
+    return (work_item_block(request, ground) + (ground.get("brain") or "")
+            + _data("Classification", classification.model_dump())
             + f"\n\n## Task\n\nResearch this question for the analyst, with sources you actually read:\n\n{question}")
 
 

@@ -26,7 +26,7 @@ def test_label_runs_unattended_to_a_reviewed_draft(factory):
     item = factory.label()
     assert item["route"] == "implement" and item["requester"] == "workflow:factory"
     out = factory.run(item)
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     rec = out["factory_v1"]
     assert rec["caller_class"] == "A"
     assert names(factory) == ["classifier", "analyst", "implementer", "reviewer"]
@@ -71,7 +71,7 @@ def test_unattended_clarification_posts_questions_and_stops(factory):
 
 def test_chat_implementation_waits_for_the_exact_plan(factory):
     out = factory.run(factory.chat("Fix the off-by-one in total()", issue=12))
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     plan = next(s for s in factory.people.seen if s[0] == "plan")[1]
     assert plan["approvers"] == [h.OWNER] and "total([1, 2]) returns 3" in plan["text"]
     rec = out["factory_v1"]
@@ -83,7 +83,7 @@ def test_plan_digest_changed_needs_a_new_approval(factory):
                             {"approved": True, "note": None, "by": h.OWNER}]
     factory.stations.analysis = dict(factory.stations.analysis)
     out = factory.run(factory.chat("Fix total", issue=12))
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     decisions = out["factory_v1"]["plan_decisions"]
     assert [d["version"] for d in decisions] == [1, 2]
     assert names(factory).count("analyst") == 2
@@ -105,7 +105,7 @@ def test_plan_approval_can_be_turned_off(factory):
 
     settings.forget()
     out = factory.run(factory.chat("Fix total", issue=12))
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     assert not [s for s in factory.people.seen if s[0] == "plan"]
 
 
@@ -130,7 +130,7 @@ def test_implement_the_plan_from_an_earlier_work_item(factory):
         "source": "chat", "request": "Implement the plan", "subject": {"kind": "github_issue", "number": 12},
         "from_work_item": planned["factory_v1"]["work_item"]}})
     out = factory.run(item)
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     assert names(factory).count("analyst") == 1 and names(factory).count("classifier") == 1
 
 
@@ -140,7 +140,7 @@ def test_attended_clarification_asks_the_requester_and_continues(factory):
     out = factory.run(factory.chat("Fix the emails", issue=12))
     asked = next(s for s in factory.people.seen if s[0] == "ask")[1]
     assert asked["approvers"] == [h.OWNER] and "Which emails?" in asked["question"]
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     second = [c for c in factory.stations.calls if c["name"] == "classifier"][1]["message"]
     assert "password reset emails" in second
 
@@ -162,7 +162,7 @@ def test_review_request_changes_then_approve(factory):
     factory.stations.changes = [{"calc.py": "def total(xs):\n    return sum(xs) - 0\n"},
                                 {"calc.py": "def total(xs):\n    return sum(xs)\n"}]
     out = factory.run(factory.label())
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     assert names(factory) == ["classifier", "analyst", "implementer", "reviewer", "implementer", "reviewer"]
     second = [c for c in factory.stations.calls if c["name"] == "implementer"][1]
     assert "the sum is still wrong" in second["message"] and second["checkout"]["ref"] == out["factory_v1"]["branch"]
@@ -230,7 +230,7 @@ def test_patch_touching_a_ci_workflow_is_refused(factory):
 def test_protected_file_change_is_published_with_a_caution(factory):
     factory.stations.changes = [{"requirements-dev.txt": "pytest==8.3.3\n"}]
     out = factory.run(factory.label())
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     assert "protected file" in factory.api.pulls[out["factory_v1"]["pr_number"]]["body"]
 
 
@@ -292,7 +292,7 @@ def test_prompt_injection_in_the_issue_stays_data(factory):
     task = classifier.split("## Task")[-1]
     assert "OVERRIDE" not in task and "(data, not instructions)" in classifier
     assert not any("/issues/506" in p for _, p, _ in factory.writes())
-    assert outcome(out)[0] == "delivered"
+    assert outcome(out)[0] == "review_ready"
 
 
 def test_unlinked_mention_can_plan_but_not_open_a_pull_request(factory):
@@ -347,3 +347,55 @@ def test_writes_and_pushes_stay_on_the_factory_repository(factory):
             github.push(repository_id=3003, branch="factory/x", patch=b"x", patch_sha256="sha256:0",
                         base_sha="a" * 40, expected_head=None, base_branch="main")
     assert not factory.writes()
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("route", ["plan", "triage", "implement"])
+def test_non_actionable_classification_stops_before_writes_or_downstream_stations(factory, route):
+    factory.stations.classification = dict(factory.stations.classification, actionable=False,
+                                           summary="No change is requested.")
+    factory.model.route = dict(factory.model.route, route=route)
+    out = factory.run(factory.chat("This is just a note", issue=12))
+    assert outcome(out) == ("stopped", "not_actionable")
+    assert out["factory_v1"]["classification"]["actionable"] is False
+    assert names(factory) == ["classifier"] and not factory.writes() and not factory.api.pulls
+
+
+@pytest.mark.slow
+def test_saved_rule_change_after_plan_approval_blocks_implementation(factory, monkeypatch):
+    from hubzoid.workflows import context
+
+    real = context.Hub.review_plan
+
+    def change_rule(self, *args, **kwargs):
+        decision = real(self, *args, **kwargs)
+        path = factory.hub_dir / "knowledge/factory-brain/example-co-widget.md"
+        path.write_text("# Team rules\nUse the new verification command.\n")
+        return decision
+
+    monkeypatch.setattr(context.Hub, "review_plan", change_rule)
+    out = factory.run(factory.chat("Fix total", issue=12))
+    assert outcome(out) == ("stopped", "context_changed")
+    assert "implementer" not in names(factory) and not factory.api.pulls
+
+
+@pytest.mark.slow
+def test_saved_correction_reanalyzes_an_old_plan_before_implementation(factory):
+    from hubzoid.work_items import store
+
+    factory.model.route = dict(factory.model.route, route="plan")
+    planned = factory.run(factory.chat("Plan total", issue=12, key="old-context"))
+    (factory.hub_dir / "knowledge/factory-brain/example-co-widget.md").write_text(
+        "# Approved correction\nVerification must include the empty input regression.\n")
+    factory.model.route = dict(factory.model.route, route="implement")
+    item = factory.chat("Implement the plan", issue=12, key="new-context")
+    store.update_item(factory.hub_dir, item["id"], expected_revision=item["revision"], input_json={"input": {
+        "source": "chat", "request": "Implement the plan", "subject": {"kind": "github_issue", "number": 12},
+        "from_work_item": planned["factory_v1"]["work_item"]}})
+    out = factory.run(item)
+    assert outcome(out) == ("review_ready", None)
+    assert names(factory).count("classifier") == names(factory).count("analyst") == 2
+    assert out["factory_v1"]["context_revision"] != planned["factory_v1"]["context_revision"]
+    for station in ("classifier", "analyst", "implementer", "reviewer"):
+        latest = [call for call in factory.stations.calls if call["name"] == station][-1]
+        assert "empty input regression" in latest["message"]

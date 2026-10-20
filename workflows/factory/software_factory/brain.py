@@ -12,6 +12,7 @@ Stations can't read the brain, so the workflow weaves it into their messages.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -27,6 +28,8 @@ def path_for(full_name: str) -> str:
 
 def read(hub_dir: Path, full_name: str) -> str:
     target = Path(hub_dir) / path_for(full_name)
+    if not target.resolve().is_relative_to(Path(hub_dir).resolve()):
+        return ""
     if not target.is_file():
         return ""
     text = target.read_text(encoding="utf-8")
@@ -69,3 +72,21 @@ def propose_note(hub_dir: Path, full_name: str, note: str, *, requester: str, wo
                                reason=reason, present=False)
     except service.ChangeError:
         return None
+
+
+def revision(hub_dir: Path, full_name: str) -> str:
+    """Fingerprint the context used by the workflow without following external links.
+
+    The SDK pins station/workflow definitions; this additionally fences the
+    curated repository facts and the root chat rules while a plan waits.
+    """
+    root = Path(hub_dir).resolve()
+    digest = hashlib.sha256()
+    for rel in ("AGENTS.md", path_for(full_name)):
+        target = root / rel
+        digest.update(rel.encode())
+        if target.resolve().is_relative_to(root) and target.is_file():
+            digest.update(target.read_bytes())
+        else:
+            digest.update(b"<absent-or-outside-hub>")
+    return "sha256:" + digest.hexdigest()

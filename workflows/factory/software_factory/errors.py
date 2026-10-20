@@ -10,6 +10,10 @@ from __future__ import annotations
 
 #: Stop reasons and what a person does next.
 REASONS = {
+    "human_action_required": "Open the linked pull request in GitHub; a person marks it ready and merges.",
+    "not_actionable": "Clarify the concrete change or ask a repository question instead; no implementation ran.",
+    "context_changed": "Review the updated shared rules and request a fresh plan. Inspect any remaining pushed branch before starting new work.",
+    "pull_request_closed": "Check the closed or merged PR in GitHub; request new work only if another change is needed.",
     "needs_clarification": "Answer the questions, then ask again (or re-add the label).",
     "implementation_not_pushed": "The implementer could not finish. Read its limitations, refine the issue and "
                                  "ask again.",

@@ -94,7 +94,7 @@ def test_a_killed_engine_finishes_the_work_once(factory_hub, conn, api, remote, 
             wstore.get_item(factory_hub, item_id)), what="the work to finish")
         assert item["state"] == "completed", item
         result = item["result_json"]["result"]["factory_v1"]
-        assert result["outcome"] == "delivered" and result["pr_number"]
+        assert result["outcome"] == "review_ready" and result["pr_number"]
         ops = wstore.list_ops(factory_hub, "factory", item_id=item_id)
         assert [o["state"] for o in ops if o["name"] == "github.pushBranch"] == ["succeeded"]
         assert [o["state"] for o in ops if o["name"] == "github.createPullRequest"] == ["succeeded"]
@@ -109,7 +109,7 @@ def test_a_killed_engine_finishes_the_work_once(factory_hub, conn, api, remote, 
 
 
 def test_approval_continues_the_parked_work_on_the_engine(factory_hub, conn, api, remote, tmp_path, monkeypatch):
-    """The ship gate: the work parks for the requester, the approval forks a
+    """A metadata edit: the work parks for the requester, the approval forks a
     new execution from the saved step, and the earlier steps replay exactly
     (the scope narrowing among them) before the change is sent once."""
     from hubzoid.work_items import operations as ops
@@ -122,11 +122,11 @@ def test_approval_continues_the_parked_work_on_the_engine(factory_hub, conn, api
     (state / "pulls.json").write_text(json.dumps({"101": {"title": "Fix", "body": "", "head": "factory/12-fix",
                                                           "base": "main", "draft": True}}))
     (state / "model.json").write_text(json.dumps({"route": "act", "issue_number": 101, "clarify": None,
-                                                 "reason": "", "act": {"operation": "mark_ready", "number": 101}}))
+                                                 "reason": "", "act": {"operation": "update_pull_request", "number": 101, "title": "Reviewed title"}}))
     engine = Engine(factory_hub, state, remote.root)
     try:
         item, _ = service.admit_and_start(factory_hub, workflow="factory", key="chat:ship-engine", route="request",
-                                          input={"source": "chat", "request": "Mark #101 ready for review"},
+                                          input={"source": "chat", "request": "Change #101 title to Reviewed title"},
                                           requester=h.OWNER, origin={"source": "chat", "surface": "web"})
         parked = wait(lambda: (lambda i: i if i["state"] == "waiting" else None)(
             wstore.get_item(factory_hub, item["id"])), what="the work to park")
@@ -141,7 +141,8 @@ def test_approval_continues_the_parked_work_on_the_engine(factory_hub, conn, api
             wstore.get_item(factory_hub, item["id"])), what="the approved work to finish")
         assert done["state"] == "completed", done
         assert done["result_json"]["result"]["factory_v1"]["outcome"] == "acted"
-        graphql = [line for line in writes.read_text().splitlines() if "/graphql" in line]
-        assert len(graphql) == 1
+        updates = [json.loads(line) for line in writes.read_text().splitlines()
+                   if json.loads(line)[0] == "PATCH" and json.loads(line)[1].endswith("/pulls/101")]
+        assert len(updates) == 1
     finally:
         engine.close()

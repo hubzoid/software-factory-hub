@@ -135,7 +135,8 @@ class FakeGitHub:
     def _pr_json(self, n):
         pr = self.pulls[n]
         head = self.remote.head(pr["head"]) or pr.get("head_sha")
-        return {"number": n, "title": pr["title"], "body": pr["body"], "state": "open", "draft": pr["draft"],
+        return {"number": n, "title": pr["title"], "body": pr["body"], "state": pr.get("state", "open"), "draft": pr["draft"],
+                "merged": pr.get("merged", False), "merged_at": pr.get("merged_at"),
                 "html_url": f"https://github.com/{FULL}/pull/{n}", "user": {"login": "factory[bot]"},
                 "head": {"ref": pr["head"], "sha": head, "repo": {"full_name": pr.get("head_repo", FULL),
                                                                   "fork": pr.get("fork", False)}},

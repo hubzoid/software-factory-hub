@@ -50,6 +50,19 @@ def test_app_mode_with_its_webhook_secret_is_ok(factory_hub, conn):
     assert row["status"] == "ok", row
 
 
+@pytest.mark.slow
+def test_narrowed_factory_route_is_reported_without_restoring_sample_defaults(factory_hub, conn):
+    from hubzoid.channels import config
+
+    active = config.export(factory_hub, "github")["config"]
+    active["provider_config"]["rules"]["routes"]["label"] = "plan"
+    active["provider_config"]["rules"]["pr_opened"] = False
+    config.apply(factory_hub, active, expected_revision=conn.revision, actor="test-admin")
+    row = _checks().github(_context(factory_hub))
+    assert row["status"] == "warn" and "custom trigger routes" in row["summary"]
+    assert config.export(factory_hub, "github")["config"]["provider_config"]["rules"]["pr_opened"] is False
+
+
 @pytest.mark.parametrize("webhook", [True, False])
 def test_token_mode_says_whether_deliveries_are_verified(factory_hub, conn, webhook):
     _token_mode(factory_hub, conn, webhook=webhook)

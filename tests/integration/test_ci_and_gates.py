@@ -13,7 +13,7 @@ def outcome(out):
 
 def deliver_pr(factory) -> dict:
     out = factory.run(factory.label())
-    assert out["factory_v1"]["outcome"] == "delivered"
+    assert out["factory_v1"]["outcome"] == "review_ready"
     return out["factory_v1"]
 
 
@@ -33,7 +33,7 @@ def test_ci_repair_on_a_factory_branch(factory):
     item = red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="ci-1")
     assert item["route"] == "revise" and item["requester"] == "workflow:factory"
     out = factory.run(item)
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     fix = out["factory_v1"]
     assert fix["caller_class"] == "C" and fix["ci_attempt"] == 1
     assert factory.api.pulls.keys() == pulls_before.keys()               # no new pull request
@@ -94,7 +94,7 @@ def test_restarted_ci_work_runs_its_own_attempt_again(factory, monkeypatch):
     with pytest.raises(RuntimeError):
         factory.run(item)
     out = factory.run(item, fresh_execution=True)                     # restart from the CI stage
-    assert outcome(out) == ("delivered", None) and out["factory_v1"]["ci_attempt"] == 1
+    assert outcome(out) == ("review_ready", None) and out["factory_v1"]["ci_attempt"] == 1
     starts = [c["body"] for c in factory.api.comments[rec["pr_number"]] if c["body"].startswith("CI fix attempt")
               and "starting on" in c["body"]]
     assert len(starts) == 1                                           # the attempt note is not repeated
@@ -142,49 +142,26 @@ def test_attended_revise_on_a_factory_pull_request(factory):
         "source": "chat", "request": "Please rename the variable xs to values",
         "subject": {"kind": "github_pr", "number": rec["pr_number"]}}})
     out = factory.run(item)
-    assert outcome(out) == ("delivered", None) and out["factory_v1"]["route"] == "revise"
+    assert outcome(out) == ("review_ready", None) and out["factory_v1"]["route"] == "revise"
     implementer = [c for c in factory.stations.calls if c["name"] == "implementer"][-1]["message"]
     assert "rename the variable xs to values" in implementer
 
 
 # -- the ship gate --------------------------------------------------------------------------
 
-def test_ship_gate_parks(factory):
-    from hubzoid.work_items.errors import Parked
-
+@pytest.mark.parametrize("requester", [h.OWNER, "admin@localhost"])
+def test_mark_ready_is_a_human_github_handoff(factory, requester):
     rec = deliver_pr(factory)
     factory.model.route = {"route": "act", "issue_number": rec["pr_number"], "clarify": None, "reason": "",
                            "act": {"operation": "mark_ready", "number": rec["pr_number"]}}
-    item = factory.chat(f"Mark #{rec['pr_number']} ready for review", key="ship-1")
-    with pytest.raises(Parked) as parked:
-        factory.run(item)
-    assert parked.value.kind == "approval"
-    op = next(o for o in factory.ops(item["id"]) if o["name"] == "github.updatePullRequest")
-    assert op["state"] == "awaiting_approval" and "github.pr_update" in op["action"]
-    assert not any(p == "/graphql" for _, p, _ in factory.api.calls)
-    assert factory.api.pulls[rec["pr_number"]]["draft"] is True
-
-
-def test_ship_gate_approve_resume(factory, monkeypatch):
-    from hubzoid.work_items import operations as ops
-    from hubzoid.work_items import service
-    from hubzoid.work_items.errors import Parked
-
-    monkeypatch.setattr(ops, "_approver_still_allowed", lambda hub_dir, hub, subject: subject == h.OWNER)
-    rec = deliver_pr(factory)
-    factory.model.route = {"route": "act", "issue_number": rec["pr_number"], "clarify": None, "reason": "",
-                           "act": {"operation": "mark_ready", "number": rec["pr_number"]}}
-    item = factory.chat(f"Mark #{rec['pr_number']} ready", key="ship-2")
-    with pytest.raises(Parked):
-        factory.run(item)
-    op = next(o for o in factory.ops(item["id"]) if o["name"] == "github.updatePullRequest")
-    with pytest.raises(Exception):
-        service.approve(factory.hub_dir, op["id"], "someone-else@example.org", digest=op["args_digest"])
-    service.approve(factory.hub_dir, op["id"], h.OWNER, digest=op["args_digest"])
+    item = factory.chat(f"Mark #{rec['pr_number']} ready for review", requester=requester, key="ship-1")
+    writes_before = factory.writes()
     out = factory.run(item)
-    assert outcome(out) == ("acted", None)
-    assert factory.api.pulls[rec["pr_number"]]["draft"] is False
-    assert sum(1 for _, p, _ in factory.api.calls if p == "/graphql") == 1
+    assert outcome(out) == ("stopped", "human_action_required")
+    assert "in GitHub" in out["reply"]
+    assert factory.api.pulls[rec["pr_number"]]["draft"] is True
+    assert factory.writes() == writes_before
+    assert not factory.ops(item["id"])
 
 
 def test_unattended_work_never_updates_a_pull_request(factory):
@@ -275,7 +252,7 @@ def test_recover_after_a_crash_between_stages(factory, monkeypatch):
         factory.run(item)
     calls = len(factory.stations.calls)
     out = factory.run(item)
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     assert len(factory.stations.calls) == calls                     # the saved station results were reused
     pushes = [o for o in factory.ops(item["id"]) if o["name"] == "github.pushBranch"]
     assert len(pushes) == 1 and len(factory.api.pulls) == 1
@@ -290,3 +267,97 @@ def test_cancelled_work_runs_no_more_stations(factory):
     with pytest.raises(Exception):
         factory.run(item)
     assert not factory.stations.calls or factory.stations.calls[-1]["name"] == "classifier"
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("existing_pr", [False, True])
+def test_replay_after_recorded_pr_side_effect_keeps_its_saved_fences(factory, monkeypatch, existing_pr):
+    """A real SDK push/PR operation completed before the simulated crash.
+
+    Later context activation or PR closure cannot retroactively turn that
+    completed side effect into a stop or make recovery open a duplicate PR.
+    """
+    from software_factory import pipeline
+
+    if existing_pr:
+        rec = deliver_pr(factory)
+        item = red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="replay-after-delivery")
+    else:
+        item = factory.chat("Fix total and get an independent review", issue=12, key="replay-after-create")
+    real, crashed = pipeline._done, []
+
+    def die_before_done(r, result, *args, **kwargs):
+        if result == "review_ready" and not crashed:
+            crashed.append(True)
+            raise SystemExit("power cut after recorded GitHub operation")
+        return real(r, result, *args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "_done", die_before_done)
+    with pytest.raises(SystemExit):
+        factory.run(item)
+    assert len(factory.api.pulls) == 1
+    assert any(op["name"] == "github.pushBranch" and op["state"] == "succeeded"
+               for op in factory.ops(item["id"]))
+    calls = len(factory.stations.calls)
+    (factory.hub_dir / "knowledge/factory-brain/example-co-widget.md").write_text(
+        "# Activated correction after delivery\nUse the updated verification command next time.\n")
+    if existing_pr:
+        factory.api.pulls[rec["pr_number"]].update(state="closed", merged=True)
+    out = factory.run(item)
+    assert outcome(out) == ("review_ready", None)
+    assert len(factory.api.pulls) == 1 and len(factory.stations.calls) == calls
+    assert sum(op["name"] == "github.pushBranch" for op in factory.ops(item["id"])) == 1
+    assert sum(method == "POST" and path.endswith("/pulls") for method, path, _ in factory.writes()) == 1
+
+
+@pytest.mark.slow
+def test_changed_context_after_push_names_the_remaining_branch(factory, monkeypatch):
+    from software_factory import stations
+
+    real = stations.call
+
+    def activate_after_review(agent, *args, **kwargs):
+        result = real(agent, *args, **kwargs)
+        if agent == "reviewer":
+            (factory.hub_dir / "knowledge/factory-brain/example-co-widget.md").write_text(
+                "# New team rule\nReview the changed policy before further work.\n")
+        return result
+
+    monkeypatch.setattr(stations, "call", activate_after_review)
+    out = factory.run(factory.label())
+    assert outcome(out) == ("stopped", "context_changed")
+    assert out["factory_v1"]["branch"] in out["reply"]
+    assert not factory.api.pulls
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("state,merged", [("closed", False), ("closed", True), ("open", True)])
+def test_closed_or_merged_pr_never_starts_ci_repair(factory, state, merged):
+    rec = deliver_pr(factory)
+    factory.api.pulls[rec["pr_number"]].update(state=state, merged=merged)
+    calls, writes = len(factory.stations.calls), factory.writes()
+    out = factory.run(red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="closed"))
+    assert outcome(out) == ("ignored", "pull_request_closed")
+    assert len(factory.stations.calls) == calls and factory.writes() == writes
+    assert factory.remote.head(rec["branch"]) == rec["pushed_sha"]
+
+
+@pytest.mark.slow
+def test_pr_closed_while_implementer_runs_never_pushes(factory, monkeypatch):
+    from software_factory import stations
+
+    rec = deliver_pr(factory)
+    real = stations.call
+
+    def close_after_implementation(agent, *args, **kwargs):
+        out = real(agent, *args, **kwargs)
+        if agent == "implementer":
+            factory.api.pulls[rec["pr_number"]]["state"] = "closed"
+        return out
+
+    monkeypatch.setattr(stations, "call", close_after_implementation)
+    item = red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="close-during")
+    out = factory.run(item)
+    assert outcome(out) == ("stopped", "pull_request_closed")
+    assert factory.remote.head(rec["branch"]) == rec["pushed_sha"]
+    assert not [o for o in factory.ops(item["id"]) if o["name"] == "github.pushBranch"]

@@ -22,7 +22,7 @@ Hubzoid evals target the chat agent only, so the pipeline's Foreman evals are in
 | `safety/ship-gate-approve-resume` | `tests/integration/test_ci_and_gates.py::test_ship_gate_approve_resume` | Waits for the requester's approval of the exact change, then sends once |
 | `safety/ship-gate-parks` | `evals/safety/ship-gate-goes-through-the-factory.md`, `test_ship_gate_parks` | Parks with nothing sent |
 | `safety/write-requires-approval` | `evals/safety/write-requires-approval.md`, `test_write_requires_approval_for_the_local_developer` | The local developer approves each write |
-| `pipeline/full-pipeline` | `test_label_runs_unattended_to_a_reviewed_draft`, `test_chat_implementation_waits_for_the_exact_plan`, and the real run in the proof | All four stations in order, a draft bound to the reviewed commit |
+| `pipeline/full-pipeline` | `test_label_runs_unattended_to_a_reviewed_draft`, `test_chat_implementation_waits_for_the_exact_plan`, and the separately recorded qualification run | All four stations in order, a draft bound to the reviewed commit |
 
 Each pipeline test also asserts the persisted route and the outcome.
 
@@ -35,3 +35,9 @@ hubzoid eval run . --tag routing
 ```
 
 Real model runs use your installed login and are skipped, never hidden, when it is missing.
+
+## Evidence categories
+
+CI runs scripted contract/integration tests against the immutable SDK pin. There is no placeholder “real” CI job: a printed instruction is not qualification. Follow SETUP.md for the real journey and record it in docs/qualification.md with runtime authentication, source/revision, test outputs and environment. A missing Docker daemon, provider account, model sign-in or authorization is a gap, never a pass.
+
+The CI repair regressions include closed/merged state at intake and closure during implementation. Human-ready tests prove no write is sent for mark-ready requests; metadata approval/recovery remains exercised on the real workflow engine with scripted providers.

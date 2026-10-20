@@ -34,6 +34,8 @@ deliver      check branch head = pushed = reviewed, open the draft, evidence, wr
 
 Revisions loop implement, publish and review with a new station revision each time. A stop at any point posts the reason and what remains.
 
+The terminal outcome is `review_ready`, which remains a draft. Draft status and merge are human-only. Each run records its approved context digest; a changed root rule or repository brief blocks subsequent implementation/publication until a fresh plan.
+
 ## Trust boundary
 
 - Stations never hold a GitHub credential. Their sandboxes are offline after the reviewed setup command.
@@ -56,3 +58,7 @@ All GitHub reads happen inside saved stages, model calls are saved steps, writes
 | Plans and evidence | `output/factory/<work item>/` and published artifacts |
 | Factory brain | `knowledge/factory-brain/*.md` in the hub's git history |
 | The factory's result | the work item's result, under `factory_v1` |
+
+## Reference decisions
+
+Foreman remains primary: `agent/instructions.ts`, `agent/subagents/*` and `agent/lib/github/approval.ts` in the attributed eve Software Factory source. Keep its station order, fresh reviewer, bounded revisions, selected research, task-origin writes and narrow curated brain. The approved human-only ready transition deliberately narrows Foreman's brokered ready operation. LangChain open-swe's source-context preparation informs saved repository provenance and a definite PR/answer/plan/stop outcome. GitHub gh-aw's safe-output separation reinforces the existing credential-free agent and host-held broker. No reference instructions execute as editor commands. See ATTRIBUTION.md.

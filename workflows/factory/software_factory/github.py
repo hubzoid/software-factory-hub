@@ -179,3 +179,20 @@ def bot_name() -> str:
         return name
     conn = connection()
     return getattr(conn.settings, "bot_name", None) or "factory"
+
+
+def pull_request_state(repository_id: int, number: int) -> dict:
+    """Fresh minimal state for revision fences, using the SDK's scoped read client.
+
+    getPullRequestContext omits merged/merged_at on the baseline SDK. No
+    model or issue text participates in deciding whether a PR can be changed.
+    """
+    from hubzoid.channels.github import client as gh
+
+    _only_factory_repo(repository_id)
+    conn = connection()
+    web = gh.for_repo(conn, repository_id, gh.READ)
+    full = gh.current_name(conn, web, repository_id)
+    got = web.request("GET", f"/repos/{full}/pulls/{int(number)}").json() or {}
+    return {"state": got.get("state"), "merged": bool(got.get("merged") or got.get("merged_at")),
+            "head_sha": (got.get("head") or {}).get("sha")}

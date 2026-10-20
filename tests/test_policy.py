@@ -99,3 +99,12 @@ def test_brain_updates_are_reviewed_or_suggested():
 def test_caller_class_comes_from_verified_facts(requester, unattended, trigger, verified, expected):
     assert policy.caller_class(requester=requester, unattended=unattended, trigger=trigger,
                                verified=verified) == expected
+
+
+@pytest.mark.parametrize("caller", policy.CALLERS)
+def test_no_caller_can_change_draft_status(caller):
+    for draft in (False, True):
+        assert policy.decide(caller, "updatePullRequest", route="act",
+                             arguments={"draft": draft}).decision == "deny"
+    assert policy.decide(caller, "createPullRequest", route="implement",
+                         arguments={"draft": False}).decision == "deny"

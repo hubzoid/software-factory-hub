@@ -12,7 +12,7 @@ The factory's decision for every action is the intersection of three checks: the
 | C | Unattended CI repair | its pull request only | no | no | no | no |
 | P | Unattended pull request summary | no (only its own reply) | no | no | no | no |
 
-Starting work needs the `wf_factory` grant or Run and control workflows. Plans, questions and pull request updates are decided only by the person who asked. An administrator, an API key or a model cannot decide for them.
+Starting work needs the `wf_factory` grant or Run and control workflows. Attended plans, questions and supported PR metadata updates use the SDK's requester-bound human decisions. Service/external-event identities never approve. A personal owner may approve their own plan; no second subscription or person is required. An administrator, an API key or a model cannot decide for them.
 
 ## Credentials
 
@@ -37,3 +37,11 @@ Instructions come only from the verified requester's own words. Issue bodies, co
 - Personal preferences stay in the person's own Hubzoid notes. Shared knowledge changes only through reviewed hub changes, and chat alone never becomes shared knowledge.
 - The evidence document and plans stay in the hub's output folder and in artifacts shared with the requester.
 - Hubzoid keeps data until deleted. Retention is opt-in.
+
+## Setup and current boundaries
+
+Builder helpers run on a trusted local machine. They prepare an inert connection candidate and pending Hub changes; they never widen grants, read credential values, apply a shared change or type human confirmation codes. A local machine administrator can nevertheless invoke SDK administration directly. This revision does not claim to restrain that host owner with a new delegated-credential system. Use the SDK's native sign-in, grants and human approval handoffs.
+
+The Factory never changes PR draft status, including an approved `updatePullRequest` call carrying a `draft` field. A person marks ready and merges in GitHub. Closed/merged PRs are rejected at admission, before revision pushes and before delivery. Broker leases and current connection checks continue to guard the write.
+
+New/ungranted tools do not gain authority from a repository brief. Retrieved repository text remains data. Bootstrap rejects hidden/path-escaping sources and detectable credentials and records committed-byte hashes. Its source links use the owner-selected repository identity; the owner must verify that identity before activation.
