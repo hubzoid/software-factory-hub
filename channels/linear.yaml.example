@@ -1,7 +1,12 @@
 version: 1
-# Linear agent sessions start factory work as the linked person. Rename to linear.yaml, then
-# `hubzoid channels apply . --file channels/linear.yaml --expected-revision absent` and
-# `hubzoid channels linear connect . linear`. Set FACTORY_LINEAR_CONNECTION: linear and add linear to FACTORY_CHANNELS.
+# Linear agent sessions start factory work as the linked person. Rename to linear.yaml and replace
+# the placeholder ids with your workspace's, then:
+#   hubzoid channels apply . --file channels/linear.yaml --expected-revision absent
+#   hubzoid channels linear setup . linear        # prints the callback and webhook URLs to set in Linear
+#   hubzoid secrets set . --name LINEAR_CLIENT_SECRET --stdin
+#   hubzoid secrets set . --name LINEAR_WEBHOOK_SECRET --stdin
+#   hubzoid channels linear connect . linear --wait 300
+# Set FACTORY_LINEAR_CONNECTION: linear and add linear to FACTORY_CHANNELS. See docs/channels/linear.md in the SDK.
 id: linear
 provider: linear
 enabled: false
@@ -9,4 +14,9 @@ workflow: factory
 run_as: linked_requester
 allowed_groups: [engineering]
 progress: true
-provider_config: {}
+provider_config:
+  organization_id: 11111111-1111-4111-8111-111111111111   # your workspace's UUID
+  team_ids: [22222222-2222-4222-8222-222222222222]        # teams the factory may work in
+  oauth_client_id: 33333333-3333-4333-8333-333333333333   # your Linear OAuth application
+  client_secret_ref: secret:hub/software-factory/LINEAR_CLIENT_SECRET
+  webhook_secret_ref: secret:hub/software-factory/LINEAR_WEBHOOK_SECRET
