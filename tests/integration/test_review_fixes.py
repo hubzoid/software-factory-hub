@@ -23,7 +23,7 @@ def test_an_explicit_plan_approval_request_beats_the_default(factory):
     set_values(factory, FACTORY_REQUIRE_PLAN_APPROVAL=False)
     factory.model.route = dict(factory.model.route, require_plan_approval=True)
     out = factory.run(factory.chat("Implement it, but let me approve the plan first", issue=12))
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     assert [s for s in factory.people.seen if s[0] == "plan"]
 
 
@@ -50,7 +50,7 @@ def test_implementation_is_built_on_the_planned_commit(factory, monkeypatch):
 
     monkeypatch.setattr(pipeline, "_plan_gate", main_moves)
     out = factory.run(factory.chat("Fix total", issue=12))
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     implementer = next(c for c in factory.stations.calls if c["name"] == "implementer")
     assert implementer["checkout"]["commit"] == out["factory_v1"]["base_sha"] == factory.remote.base
     assert factory.remote.head("main") != factory.remote.base
@@ -93,7 +93,7 @@ def test_a_crash_around_the_ledger_update_replays_cleanly(factory, monkeypatch, 
     # the publish stage never completed: drop its unsaved step, as the engine would
     factory.steps[item["id"]] = [s for s in factory.steps[item["id"]] if s[0] != "hz_stage:publish"]
     out = factory.run(item)
-    assert outcome(out) == ("delivered", None)
+    assert outcome(out) == ("review_ready", None)
     pushes = [o for o in factory.ops(item["id"]) if o["name"] == "github.pushBranch"]
     assert len(pushes) == 1 and pushes[0]["state"] == "succeeded"
 
@@ -113,8 +113,9 @@ def test_an_api_act_route_reads_its_named_action(factory, monkeypatch):
     factory.model.route = {"route": "act", "issue_number": rec["pr_number"], "clarify": None, "reason": "",
                            "act": {"operation": "mark_ready", "number": rec["pr_number"]}}
     item = factory.chat(f"Mark #{rec['pr_number']} ready", route="act", key="api-act")
-    with pytest.raises(Parked):
-        factory.run(item)
+    out = factory.run(item)
+    assert outcome(out) == ("stopped", "human_action_required")
+    assert not factory.ops(item["id"])
 
 
 def test_an_earlier_plans_handoff_is_carried_into_the_new_work(factory):
@@ -161,7 +162,7 @@ def test_a_draft_settled_by_a_person_is_confirmed_on_github(factory, monkeypatch
 
     monkeypatch.setattr(github, "write", settled)
     out = factory.run(factory.label())
-    assert outcome(out) == ("delivered", None) and out["factory_v1"]["pr_number"] in factory.api.pulls
+    assert outcome(out) == ("review_ready", None) and out["factory_v1"]["pr_number"] in factory.api.pulls
 
 
 def test_chat_keys_tell_routes_and_finished_work_apart(factory, monkeypatch):
@@ -207,7 +208,7 @@ def test_a_station_that_fails_twice_ends_in_a_clear_stop(factory):
 def test_a_station_that_fails_once_is_retried(factory):
     factory.stations.failures = {"implementer": 1}
     out = factory.run(factory.label())
-    assert outcome(out)[0] == "delivered" and factory.api.pulls
+    assert outcome(out)[0] == "review_ready" and factory.api.pulls
 
 
 def test_chat_learns_the_repository_id_in_one_call(factory):
@@ -239,6 +240,7 @@ def test_status_says_whether_a_plan_was_approved(factory, monkeypatch):
     planned = factory.run(factory.chat("Plan the fix for total, stop after the plan", issue=12))
     status = tools._status(planned["factory_v1"]["work_item"])
     assert status["plan_approval"].startswith("not approved")
+    assert status["context_revision"] == planned["factory_v1"]["context_revision"]
     factory.model.route = dict(factory.model.route, route="implement")
     built = factory.run(factory.chat("Fix total", issue=12))
     status = tools._status(built["factory_v1"]["work_item"])

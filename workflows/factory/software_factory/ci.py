@@ -106,6 +106,21 @@ def _pr(repo, number: int) -> dict:
             "url": pr.get("html_url"), "title": pr.get("title"), "state": pr.get("state")}
 
 
+def require_open(repo, number: int, *, expected_head: str | None = None) -> dict:
+    """Recheck provider state at admission, publication and delivery.
+
+    This read must not come from a saved stage: a PR can close while a
+    station runs or a workflow waits. Publication still leases the exact head.
+    """
+    state = github.pull_request_state(repo.repository_id, number)
+    if state["state"] != "open" or state["merged"]:
+        raise FactoryStop("pull_request_closed", "The pull request is closed or merged. No automated revision "
+                          "will be published; start a new request if more work is needed.")
+    if expected_head is not None and state["head_sha"] != expected_head:
+        raise FactoryStop("head_changed", "The pull request head changed. A person must review before continuing.")
+    return state
+
+
 def admit(r) -> dict:
     data = r.request.data
     number = r.request.subject.number
@@ -116,6 +131,10 @@ def admit(r) -> dict:
         if r.request.subject.repository_id not in (None, repo.repository_id):
             return {"quiet": "other_repository"}
         pr = _pr(repo, number)
+        try:
+            require_open(repo, number)
+        except FactoryStop as stop:
+            return {"quiet": stop.code}
         if pr["fork"]:
             return {"stop": "fork_pull_request", "message": "Pull requests from forks never get automated repair."}
         if pr["head_sha"] != data.get("head_sha"):
@@ -144,7 +163,7 @@ def admit(r) -> dict:
             "The checks that failed at the previous head pass, without weakening or skipping them."]
         return {"repo": repo.__dict__, "pr": pr, "attempts": used, "exhausted": not mine and len(used) >= cap,
                 "owner_item": entry.get("owner_item"), "ci_context": failing,
-                "classification": prior["classification"], "analysis": analysis, "brain": _brain_of(repo)}
+                "classification": prior["classification"], "analysis": analysis, "brain": _brain_of(repo), "context_revision": _revision_of(repo)}
 
     out = hub.work_item.checkpoint(routes.CI_CHECK, check)
     if out.get("quiet"):
@@ -164,7 +183,7 @@ def admit(r) -> dict:
     # Posted before the repair starts, so a run that dies mid-repair still counts.
     progress.reply(f"CI fix attempt {attempt} of {cap} starting on `{pr['head_sha'][:12]}`. Failing: {broken}.",
                    key=f"ci-attempt:{pr['head_sha']}", kind="progress")
-    r.ground.update(brain=out["brain"], subject={"number": number, "url": pr["url"], "title": pr["title"]},
+    r.ground.update(brain=out["brain"], context_revision=out["context_revision"], subject={"number": number, "url": pr["url"], "title": pr["title"]},
                     subject_text={"title": pr["title"], "failing_checks": out["ci_context"]})
     r.record.update(repository=r.repo.full_name, branch=pr["branch"], ci_attempt=attempt, failing_head=pr["head_sha"])
     progress.record(branch=pr["branch"], ci_attempt=attempt)
@@ -183,6 +202,10 @@ def admit_attended(r) -> dict:
         if not number:
             return {"stop": "policy_denied", "message": "Name the factory pull request to revise."}
         pr = _pr(repo, number)
+        try:
+            require_open(repo, number)
+        except FactoryStop as stop:
+            return {"stop": stop.code, "message": stop.message}
         if pr["fork"]:
             return {"stop": "fork_pull_request", "message": "Pull requests from forks are never changed by the "
                                                             "factory."}
@@ -194,7 +217,8 @@ def admit_attended(r) -> dict:
         if not prior.get("analysis"):
             prior = _fallback(pr["branch"])
         return {"repo": repo.__dict__, "pr": pr, "owner_item": entry.get("owner_item"),
-                "classification": prior["classification"], "analysis": prior["analysis"], "brain": _brain_of(repo)}
+                "classification": prior["classification"], "analysis": prior["analysis"], "brain": _brain_of(repo),
+                "context_revision": _revision_of(repo)}
 
     out = hub.work_item.checkpoint(routes.CI_CHECK, check)
     if out.get("stop"):
@@ -205,7 +229,7 @@ def admit_attended(r) -> dict:
     if r.request.data.get("path"):
         where = f" (on {r.request.data['path']}" + (f" line {r.request.data['line']}" if r.request.data.get(
             "line") else "") + ")"
-    r.ground.update(brain=out["brain"], subject={"number": number, "url": pr["url"], "title": pr["title"]},
+    r.ground.update(brain=out["brain"], context_revision=out["context_revision"], subject={"number": number, "url": pr["url"], "title": pr["title"]},
                     subject_text={"title": pr["title"]})
     r.record.update(repository=r.repo.full_name, branch=pr["branch"])
     return {"branch": pr["branch"], "head_sha": pr["head_sha"], "owner_item": out["owner_item"],
@@ -223,3 +247,10 @@ def _brain_of(repo) -> str:
     from . import brain
 
     return brain.for_station(Path(context._ctx().hub_dir), repo.full_name)
+
+
+def _revision_of(repo) -> str:
+    from hubzoid.workflows import context
+    from . import brain
+
+    return brain.revision(context._ctx().hub_dir, repo.full_name)

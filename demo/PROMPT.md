@@ -1,17 +1,17 @@
 # The one-prompt demo
 
-From a fresh clone to a reviewed draft pull request on your own scratch repository, in about ten minutes. All data is the labelled synthetic sample in `fixtures/`.
+From a fresh clone to a reviewed draft pull request on your explicitly authorized scratch repository. Measure the run; elapsed time is not yet qualified. All data is the labelled synthetic sample in `fixtures/`.
 
 ## For Claude Code or Codex
 
 Paste this from the cloned folder:
 
-> Set up the Software Factory hub in this folder for a new private scratch repository called factory-sample under my GitHub account. Follow SETUP.md: create the scratch repository from fixtures/sample-repo and seed its issues with demo/seed_issues.py, set FACTORY_REPO, check the settings, prepare the sandbox, and show me the setup command and the GitHub permissions before anything touches the repository. Ask me to connect GitHub with a token I type myself. Run doctor and fix what it reports. Start the hub on port 8701, then add the factory label to issue #1 with gh and watch the work item until it ends. Tell me the draft pull request link, the reviewed commit and how long each step took. Do not merge anything, and do not touch any other repository.
+> Set up the Software Factory hub in this folder for a new private scratch repository called factory-sample under my GitHub account. Follow SETUP.md: create the scratch repository from fixtures/sample-repo and seed its issues with demo/seed_issues.py, set FACTORY_REPO, check the settings, prepare the sandbox, and show me the setup command and the GitHub permissions before anything touches the repository. Ask me to connect GitHub with a token I type myself. Run doctor and fix what it reports. Start the hub on port 8701, then start manual intake for issue #1 with the SDK command from SETUP.md and watch the work item until it ends. Only use a label event if verified forwarding actually delivers it. Tell me the draft pull request link, the reviewed commit and how long each step took. Do not merge anything, and do not touch any other repository.
 
 What you see:
 
 1. The settings, the setup command and the token permissions, before anything runs.
-2. Doctor with every row green.
+2. Doctor with failed checks resolved and PAT/manual-intake warnings explained.
 3. On issue #1: "Accepted", then progress notes after the classifier, the analyst and the implementer.
 4. A draft pull request that fixes the rounding (sum first, round once), with the regression test passing, the reviewer's result for each acceptance criterion, and `Closes #1`.
 5. The wrap-up on the issue with the pull request link.

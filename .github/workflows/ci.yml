@@ -3,7 +3,7 @@ on:
   push:
   pull_request:
   schedule:
-    - cron: "17 3 * * *"        # nightly against the SDK branch
+    - cron: "17 3 * * *"        # nightly against the immutable SDK evidence pin
 permissions:
   contents: read
 jobs:
@@ -19,8 +19,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install Hubzoid (the SDK branch this hub builds on)
-        run: python -m pip install "hubzoid @ git+https://github.com/hubzoid/hubzoid@rh/software-factory-github-push" pytest
+      - name: Install the pinned SDK and test runner
+        run: python -m pip install -r requirements-sdk.txt pytest
       - name: Unit tests (routes, policy, schemas, settings, patch check, intake, scope)
         if: matrix.suite == 'unit'
         run: python -m pytest -q tests --ignore=tests/integration --junitxml=output/unit.xml
@@ -40,10 +40,3 @@ jobs:
         with:
           name: junit-${{ matrix.suite }}
           path: output/*.xml
-  real:
-    # Real model and real provider qualification needs a provisioned login and a scratch
-    # repository, so it runs only when a maintainer starts it with those secrets in place.
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "Run the real journey from a machine with Claude Code or Codex signed in. See docs/evals.md."

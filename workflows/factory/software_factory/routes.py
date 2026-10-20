@@ -19,7 +19,7 @@ REPLY = "channel.reply"
 GITHUB = "github.write"
 #: Publishing a checked patch to a factory branch (the SDK's push_branch).
 PUSH = "github.push"
-#: Changing a pull request, including marking it ready. Waits for the
+#: Changing supported pull request metadata. Waits for the
 #: requester's approval of the exact change (work-items.yaml).
 PR_UPDATE = "github.pr_update"
 

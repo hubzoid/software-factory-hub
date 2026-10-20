@@ -90,6 +90,8 @@ def github(context) -> dict:
     if not conn.config.enabled:
         notes.append("paused (enabled: false), so GitHub events are recorded but start nothing")
     if cfg.mode == "pat":
+        notes.append("PAT mode does not provide event delivery: use manual intake unless verified public "
+                     "forwarding is configured")
         notes.append("local token mode: replies use your own GitHub account, and pushes use your whole personal "
                      "token (not narrowed to one repository, so use a fine-grained token limited to it)")
     if not getattr(cfg, "webhook_secret_ref", None):
@@ -175,7 +177,7 @@ def sandbox(context) -> dict:
 
 
 def write_modes(context) -> dict:
-    """Every pull request update waits for the requester, and nothing can merge."""
+    """Metadata updates wait for the requester; draft status and merge are human-only."""
     hub_dir = _hub(context)
     try:
         from hubzoid.work_items import config
@@ -185,10 +187,8 @@ def write_modes(context) -> dict:
         return _row("fail", f"work-items.yaml: {getattr(exc, 'message', exc)}", "Fix the line shown.")
     mode = cfg.write_modes.get("github.pr_update", "off")
     if mode != "approve":
-        return _row("warn", f"github.pr_update is {mode!r}: the factory cannot mark a pull request ready, even after "
-                            "approval.", "Set github.pr_update: approve in work-items.yaml.")
-    return _row("ok", "Pull request updates wait for the requester's approval of the exact change. There is no merge "
-                      "tool.")
+        return _row("warn", f"github.pr_update is {mode!r}: supported metadata edits cannot run after approval.", "Set github.pr_update: approve in work-items.yaml.")
+    return _row("ok", "Pull request metadata updates wait for exact approval. A person alone marks drafts ready and merges in GitHub.")
 
 
 def channels(context) -> dict:
@@ -218,7 +218,7 @@ def channels(context) -> dict:
 
 
 def runtime(context) -> dict:
-    """An installed Claude Code or Codex login runs the stations; no API key."""
+    """Check the installed runtime binary; authentication and hosting need separate qualification."""
     found = [name for name in ("claude", "codex") if shutil.which(name)]
     schedules = os.environ.get("HUBZOID_SCHEDULES")
     env_file = _hub(context) / ".env"

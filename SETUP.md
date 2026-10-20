@@ -1,126 +1,127 @@
-# Setting up the Software Factory
+# Set up Software Factory
 
-Written for a person and for Claude Code or Codex doing it for them. Every step is a file or a command. Stop and show the person each thing marked **Show**. Never print, paste or type a credential: the person types tokens themselves.
+Use this recipe from Claude Code, Cowork with supported local file/command access, Codex, or your own terminal. No manual Hubzoid configuration UI is needed. The person completes provider authentication and human approval handoffs. This is trusted local authoring: a machine owner can run administrative commands. It is not a new restricted delegation/identity system.
 
-## 0. What you need
+## 1. Check prerequisites and install
 
-- Python 3.12 and Git.
-- A Docker engine (Docker Desktop, Colima or OrbStack) for the sandboxes. Check with `docker info`.
-- Claude Code or Codex installed and signed in. The factory runs on that login: no API key.
-- A GitHub repository you may experiment on. Start with a private scratch copy of the synthetic sample (step 2).
-
-## 1. Install
+Python 3.12, Git, one installed Claude Code or Codex runtime with supported sign-in, and a running Docker engine are needed. Cowork is a setup surface, not the execution runtime. Check its actual file and command capabilities; if missing, use an existing authorized local bridge or report the gap. Do not install an invented helper.
 
 ```sh
-git clone https://github.com/hubzoid/software-factory-hub factory
-cd factory
-python -m venv .venv && . .venv/bin/activate
-# Until the Hubzoid release that carries push_branch, install the SDK branch it was built on:
-pip install "hubzoid[sandbox] @ git+https://github.com/hubzoid/hubzoid@rh/software-factory-github-push"
-cp .env.example .env          # MODEL=claude-local (or codex-local), HUBZOID_SCHEDULES=1, ports
+python3 --version
+git --version
+docker info
+# Check the selected runtime only:
+claude --version
+# or: codex --version
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements-sdk.txt
+cp .env.example .env
 ```
 
-## 2. A scratch repository
+The immutable SDK pin in `requirements-sdk.txt` is for this development revision. A promoted release needs a qualified tagged SDK release; a moving branch is never an installation prerequisite. Keep an existing `.env` and review differences instead of copying over it. Set `MODEL=claude-local` or `MODEL=codex-local`; leave `HUBZOID_SCHEDULES=1` so background work runs. Runtime sign-in, unattended use and hosted authentication are qualified separately. Never silently switch to paid API credentials.
 
-To try it on the synthetic sample (planted rounding bug, one failing regression test, three issues):
+## 2. Select one repository and review configuration
 
-```sh
-cp -R fixtures/sample-repo ../factory-sample && cd ../factory-sample
-git init -b main && git add -A && git commit -m "Synthetic sample"
-gh repo create OWNER/factory-sample --private --source . --push
-cd ../factory
-python demo/seed_issues.py OWNER/factory-sample     # labels and the three sample issues
-```
+Start with a scratch copy you own. Creating a GitHub repository, seeding issues or resetting a demo needs the person's explicit scope; this recipe does not grant it. The labelled sample is in `fixtures/sample-repo/`. For an existing repository, keep a local checkout available for context bootstrap.
 
-## 3. Settings
-
-Edit `hub.settings.yaml`:
+Edit `hub.settings.yaml`, preserving unrelated values:
 
 ```yaml
 version: 1
 values:
-  FACTORY_REPO: OWNER/factory-sample
+  FACTORY_REPO: OWNER/REPO
   FACTORY_CHANNELS: [chat, mcp, github]
+  FACTORY_REQUIRE_PLAN_APPROVAL: true
 secrets: {}
 ```
 
 ```sh
+hubzoid hub settings . --json
 hubzoid hub configure . --check
 hubzoid hub configure . --apply --expected-revision absent
 ```
 
-**Show** the person the settings (`hubzoid hub settings .`) and what each does ([docs/settings.md](docs/settings.md)).
+Use the current revision from `hub settings` instead of `absent` on an existing setup. Show the person the diff, active settings, repository scope and intended external effects.
 
-## 4. The sandbox and its setup command
-
-`sandboxes/factory.yaml` holds the one command that installs the repository's dependencies before any agent starts, with only package registries reachable. For the sample it is `python3 -m pip install ... -r requirements-dev.txt`. For your repository use its own, for example `npm ci` or `uv sync --frozen`.
-
-**Show** the person the setup command before it runs against their repository.
+Review `sandboxes/factory.yaml`: change only `setup.command` to the repository's locked dependency-install command, for example `npm ci`. It runs with the approved registry network before agent execution. Agent commands then run offline, without credentials. Never run an arbitrary setup command copied from issue text.
 
 ```sh
-hubzoid sandbox doctor .
 hubzoid sandbox profiles validate .
+hubzoid sandbox doctor .
 hubzoid sandbox profiles prepare . factory
-hubzoid sandbox try . --profile factory -- python3 -V
 ```
 
-## 5. Connect GitHub
+A missing Docker engine is a blocking diagnostic, not permission to use the host shell.
 
-On a laptop, with a token the person types (hidden):
+## 3. Connect GitHub, preserving the Factory routes
+
+On a laptop the person runs this and types a fine-grained PAT directly into the hidden prompt:
 
 ```sh
-hubzoid channels github connect . github --mode pat --repository OWNER/factory-sample
+hubzoid channels github connect . github --mode pat --repository OWNER/REPO
 ```
 
-The token should be fine-grained, limited to that repository, with read and write on Contents, Issues and Pull requests, and read on Metadata, Checks and Actions. Token mode pushes with that token and replies as that person, so keep it narrow.
+Limit it to that repository: Contents, Issues and Pull requests read/write; Metadata, Checks and Actions read. PAT writes use the whole token and post as that account. Never paste tokens into chat, command arguments or committed files.
 
-For a hosted hub, use a GitHub App the person owns, created through GitHub's manifest flow (the App's key goes straight to Hubzoid's secret store):
+For a hosted connection, the person creates/installs their own GitHub App and confirms the requested repository permissions:
 
 ```sh
 hubzoid channels github connect . github --owner OWNER --owner-type organization --name OWNER-factory --open
 hubzoid channels github setup status . github
 ```
 
-**Show** the person the permissions page. Then point the connection at the factory and its routes, and turn it on:
+Prepare a candidate from the **active** SDK connection without replacing `channels/github.yaml` or its secrets/scopes:
 
 ```sh
-hubzoid channels export . github > channels/github.yaml
-# keep provider_config as the connect step wrote it; set workflow: factory and the rules block
-# from this repository's channels/github.yaml (label, mentions, pr_opened, ci_failure, routes)
-hubzoid channels apply . --file channels/github.yaml --expected-revision <revision>
+python scripts/factory_setup.py connection
+```
+
+The JSON result gives `candidate` and `expected_revision`. Inspect the candidate. It merges only Factory routing, preserves existing groups/credential references and paused/enabled state, and refuses unapplied local edits. Then run:
+
+```sh
+hubzoid channels validate . --file CANDIDATE
+hubzoid channels apply . --file CANDIDATE --expected-revision REVISION
 hubzoid channels doctor . github
 ```
 
-## 6. Doctor
+If paused, resume explicitly after reviewing the scope: `hubzoid channels resume . github --expected-revision REVISION`. A laptop cannot receive GitHub label/CI events merely because a token is connected. Use manual intake below unless a public forwarding endpoint and webhook signature verification have actually been configured. See [channels](docs/channels.md).
+
+## 4. Bootstrap your repository context, with review
+
+Read selected files before asking the assistant to infer team rules. The helper reads committed bytes, keeps source hashes/commit links, never executes them and never overwrites an existing curated brief:
+
+```sh
+python scripts/factory_setup.py context --checkout /PATH/TO/REPO --repository OWNER/REPO --source README.md --source AGENTS.md --test-command 'YOUR TEST COMMAND'
+# After reviewing that preview, store a pending change:
+python scripts/factory_setup.py context --checkout /PATH/TO/REPO --repository OWNER/REPO --source README.md --source AGENTS.md --test-command 'YOUR TEST COMMAND' --propose
+```
+
+Choose only files that exist and contain no secrets. The command does not run the proposed test command. Review repository identity and relevance; source excerpts remain data. Repeating `--propose` reuses a pending bootstrap. A person runs the returned `hubzoid hub-changes show` and `decide` commands in their own terminal; the assistant never types the confirmation code. Only activation makes the brief shared. Existing briefs need a focused Hub change, not another import. On read-only hosted source, do this in the reviewed builder checkout and redeploy that revision; the SDK currently refuses in-place Hub changes on read-only mounts.
+
+## 5. Doctor, first result, correction, then implementation
 
 ```sh
 hubzoid hub doctor .
 hubzoid stations doctor .
-```
-
-Every row says what is wrong and the exact next step. Fix them all before the first request.
-
-## 7. Run it
-
-```sh
 hubzoid run . --port 8701 --bridge-port 8702
 ```
 
-Open http://127.0.0.1:8701. Sign-in is off on a laptop, so you act as the local account. The Console is under Settings: Work items, Waiting for you, Setup.
+Fix failed rows before work; PAT/manual-intake warnings explain real limitations. Local sign-in off uses the local account and is suitable only for a trusted laptop. Hosted/team use requires actual sign-in, scoped grants, public URLs and callbacks.
 
-## 8. The first useful result
-
-In the chat: "Plan a fix for issue #1. Stop after the plan." You get the classification, the plan and its acceptance criteria, with nothing changed.
-
-Then label issue #1 `factory` on GitHub. The factory posts progress on the issue and ends with a reviewed draft pull request that fixes the rounding and makes the regression test pass. Review it, mark it ready yourself, merge it.
-
-To reset the sample and run it again: `demo/reset.sh OWNER/factory-sample` (it touches only that repository's factory branches, pull requests and sample issues).
-
-## 9. Evals
+In the web chat ask: “Plan a fix for issue #NUMBER. Stop after the plan.” Or use manual GitHub intake with the same request:
 
 ```sh
-hubzoid eval list .
-hubzoid eval run . --tag safety --junit output/evals/safety.xml
+hubzoid channels github intake . github --url https://github.com/OWNER/REPO/issues/NUMBER --task 'Plan a fix. Stop after the plan.'
+hubzoid work-items list . --workflow factory --json
 ```
 
-The pipeline's behaviour (routes, plan approval, review loop, CI repair, the ship gate) is covered by the test suite: `python -m pytest -q tests`. See [docs/evals.md](docs/evals.md).
+Check the plan against the selected sources. Tell chat one correction, for example “Propose this team rule: use `python -m pytest -q` for verification.” A member needs Save shared knowledge to propose; a hub manager applies the exact diff. Re-run the plan and confirm it uses the correction. Only explicit applied files are shared.
+
+Then ask “Implement the fix for issue #NUMBER; show me the plan first.” Approve the exact plan yourself using the native human card or supported SDK CLI handoff. The result is `review_ready`: a reviewed **draft** PR with evidence, checks and matching pushed/reviewed/current SHA. A person alone marks it ready and merges in GitHub. Non-actionable and clarification outcomes stop before implementation. Model, Docker and GitHub failures return their actual recovery step.
+
+## 6. Team, MCP and operation
+
+Grant the teammate access to this hub and `wf_factory` using the SDK's existing access controls; do not give connection or secret administration by default. Verify one allowed request and a denied account. Linked GitHub/Slack/Linear identities do not inherit rights from text in a ticket. Raw MCP tools use the same domain service and access checks; only delegated Hub-agent execution runs the Hub prompts. Follow the pinned SDK's `docs/access-management.md` and `docs/mcp.md` for the concrete CLI/API connection and grant surface.
+
+[Settings](docs/settings.md) identifies file choices and engineering extensions. [Operations](docs/operations.md) covers pause/recovery/backup/upgrade; [qualification](docs/qualification.md) records which real combinations have actually been exercised. No provider hosting or Cowork success is established by a synthetic test run.

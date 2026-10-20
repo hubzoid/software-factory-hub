@@ -202,13 +202,16 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
         labels = github.read("listLabels", repository_id=repo.repository_id, page_size=100)["data"]
         out["labels"] = [{"name": l.get("name"), "description": l.get("description")} for l in labels]
         out["brain"] = brain.for_station(_hub_dir(), repo.full_name)
+        out["context_revision"] = brain.revision(_hub_dir(), repo.full_name)
         if req.from_work_item:
             out["prior"] = _prior_plan(req.from_work_item, r.requester, repo.full_name)
         return out
 
     r.ground.update(hub.work_item.checkpoint(routes.GROUND, read))
     r.repo = github.Repo(**r.ground["repo"])
-    r.record.update(repository=r.repo.full_name, subject=r.ground.get("subject"))
+    r.record.update(repository=r.repo.full_name, subject=r.ground.get("subject"),
+                    context_revision=r.ground["context_revision"])
+    progress.record(context_revision=r.ground["context_revision"])
     _drain(r)
 
 
@@ -223,6 +226,10 @@ def _prior_plan(item_id: str, requester: str, full_name: str) -> dict | None:
         return None
     result = ((prior.get("result_json") or {}).get("result") or {}).get("factory_v1") or {}
     if result.get("repository") != full_name or not result.get("analysis"):
+        return None
+    if result.get("context_revision") != brain.revision(_hub_dir(), full_name):
+        # Re-analyze after an approved correction; the old plan remains
+        # readable evidence, never a shortcut around the new shared rules.
         return None
     analysis = dict(result["analysis"])
     analysis["handoff_id"] = carry_handoff(item_id, analysis.get("handoff_id"))
@@ -268,6 +275,9 @@ def _classify(r: Run) -> Classification:
             raise FactoryStop("needs_clarification", "The request needs answers before the factory can continue:\n"
                               + "\n".join(f"- {q}" for q in c.questions), details={"questions": c.questions})
     r.record["classification"] = c.model_dump()
+    if not c.actionable:
+        raise FactoryStop("not_actionable", "The request is not actionable: " + c.summary,
+                          details={"classification": c.model_dump()})
     progress.stage(routes.CLASSIFY, f"Classified as a {c.priority}-priority {c.type} ({c.complexity}, "
                                     f"{c.affected_area}). {c.summary}", post=routes.ANALYZE in routes.stages(r.route))
     _drain(r)
@@ -482,6 +492,18 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
     raise FactoryStop("plan_changes_requested", "The plan was not approved.")
 
 
+def _context_current(r: Run) -> None:
+    """An approved plan cannot silently use a different shared rule revision.
+
+    Stop conservatively and request a new plan; do not infer equivalence of
+    arbitrary instructions or silently re-approve on the human's behalf.
+    """
+    expected = r.ground.get("context_revision")
+    if expected and brain.revision(_hub_dir(), r.repo.full_name) != expected:
+        raise FactoryStop("context_changed", "The shared repository rules changed while this work was running "
+                          "or waiting. Ask for a fresh plan and approve it before continuing.")
+
+
 def _implement(r: Run) -> dict:
     _ground(r)
     c = _classify(r)
@@ -508,6 +530,7 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
     reviews: list[dict] = []
     revision = first_revision
     for cycle in range(cycles + 1):
+        _context_current(r)
         if head:
             checkout = {"url": r.repo.clone_url, "ref": branch}
         else:
@@ -530,6 +553,11 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
         _drain(r)
 
         def pub(call=call, revision=revision, head=head) -> dict:
+            _context_current(r)
+            if pr_number is not None:
+                from . import ci
+
+                ci.require_open(r.repo, pr_number, expected_head=head)
             return publish.publish_branch(repo=r.repo, call_id=call, branch=branch, revision=revision,
                                           owner_item=owner_item, expected_head=head).to_json()
 
@@ -596,6 +624,12 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
              pushed_sha: str, pr_number: int | None) -> dict:
     """Open one draft pull request bound to the reviewed SHA, or report on the
     existing one (a revision). Marking it ready and merging belong to a person."""
+    _context_current(r)
+    if pr_number is not None:
+        from . import ci
+
+        ci.require_open(r.repo, pr_number, expected_head=pushed_sha)
+
     def heads() -> dict:
         return {"remote": github.branch_head(r.repo.repository_id, branch)}
 
@@ -669,7 +703,7 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
         text = (f"{why} is pushed to pull request #{pr_number}" + (f": {pr_url}" if pr_url else ".") + "\n\n"
                 f"The branch {branch} is now at `{pushed_sha[:12]}`. {passing} Check before it merges: {look}.")
     text += (f"\n\nEvidence: {ev_url}" if ev_url else "") + note
-    return _done(r, "delivered", text)
+    return _done(r, "review_ready", text)
 
 
 def _brain_note(r: Run, a: Analysis, impl: Implementation, review: Review) -> str:
@@ -707,6 +741,8 @@ def _revise(r: Run) -> dict:
         context = ci.admit_attended(r)
     c = Classification.model_validate(context["classification"])
     a = Analysis.model_validate(context["analysis"])
+    r.record["context_revision"] = r.ground.get("context_revision")
+    progress.record(context_revision=r.record["context_revision"])
     return _build_and_review(r, c, a, branch=context["branch"], expected_head=context["head_sha"],
                              owner_item=context["owner_item"], ci_context=context.get("ci_context"),
                              first_revision=context["revision"], pr_number=context["pr_number"],
@@ -750,10 +786,8 @@ def _act(r: Run) -> dict:
         progress.stage(routes.ACT, text, post=False)
         return _done(r, "acted", text)
     if op == "mark_ready":
-        progress.reply(f"Marking #{act.number} ready waits for your approval in Hubzoid (Work items).",
-                       key="act-wait", kind="question")
-        github.write("updatePullRequest", **common, draft=False)
-        text = f"#{act.number} is marked ready for review. Merging stays with a person."
+        raise FactoryStop("human_action_required", f"Open pull request #{act.number} in GitHub to mark it ready "
+                          "for review. The factory leaves it as a draft; a person marks it ready and merges.")
     elif op == "update_pull_request":
         fields = {k: v for k, v in (("title", act.title), ("body", act.body)) if v}
         github.write("updatePullRequest", **common, **fields)

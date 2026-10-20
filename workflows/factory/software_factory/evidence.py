@@ -85,7 +85,7 @@ def evidence_markdown(record: dict) -> str:
     """The work's evidence as a readable document."""
     out = [f"# Factory evidence: work {record.get('work_item', '')[:8]}", ""]
     for key, label in (("route", "Route"), ("caller_class", "Caller class"), ("repository", "Repository"),
-                       ("base_sha", "Base commit"), ("plan_digest", "Plan digest"), ("branch", "Branch"),
+                       ("base_sha", "Base commit"), ("context_revision", "Approved Hub context revision"), ("plan_digest", "Plan digest"), ("branch", "Branch"),
                        ("pushed_sha", "Pushed commit"), ("reviewed_sha", "Reviewed commit"),
                        ("pr_url", "Draft pull request"), ("outcome", "Outcome"), ("stop_reason", "Stop reason")):
         if record.get(key) not in (None, ""):

@@ -82,7 +82,7 @@ REASONS = {
          "duplicates in this repository and open a draft pull request for their own branch.",
     "C": "A CI repair may only comment on its own pull request and push to the factory's own branch.",
     "P": "A pull request summary posts one orientation comment and nothing else.",
-    "pr_update": "Changing a pull request, including marking it ready, waits for the person who asked.",
+    "pr_update": "Changing pull request metadata waits for exact approval. A person marks it ready in GitHub.",
 }
 
 
@@ -116,6 +116,10 @@ def decide(caller: str, operation: str, *, number: int | None = None, intake: in
     """The factory's decision for one action. `operation` is a matrix row or a
     GitHub tool name. `number` is the issue or pull request the call targets,
     `intake` the one the work came from."""
+    if operation == "updatePullRequest" and "draft" in (arguments or {}):
+        return Verdict("deny", "A person changes draft status in GitHub. The factory never marks a PR ready.")
+    if operation == "createPullRequest" and (arguments or {}).get("draft") is False:
+        return Verdict("deny", "The factory opens only draft pull requests.")
     if caller not in CALLERS:
         return Verdict("deny", f"Unknown caller class {caller!r}.")
     if operation in GITHUB_TOOLS:

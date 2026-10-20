@@ -2,6 +2,8 @@
 
 A ready-made Hubzoid hub that turns engineering requests into reviewed draft pull requests. Label an issue, mention the factory, or ask in chat: it classifies the work, researches outside facts when needed, plans it in a real checkout, implements it in an isolated sandbox, has an independent reviewer check the exact commit, and opens a draft pull request. A person reviews it, marks it ready and merges. The factory has no merge tool.
 
+> Qualification: the real-provider matrix is tracked in [docs/qualification.md](docs/qualification.md). Scripted tests are contract evidence, not a live hosting/model claim.
+
 > The public name is still open: eve's template is also called "Software Factory". This draft keeps the name until a founder decides.
 
 It is a Hubzoid port of eve's Software Factory template ("Foreman", MIT), with patterns from LangChain open-swe and github/gh-aw. See [ATTRIBUTION.md](ATTRIBUTION.md).
@@ -15,7 +17,7 @@ It is a Hubzoid port of eve's Software Factory template ("Foreman", MIT), with p
 | Ask in the web chat or from Claude, ChatGPT or Codex over MCP | The same work, with the plan waiting for your approval before anything is built. |
 | Let CI fail on a factory branch | Diagnoses and repairs it, at most twice per branch, on the same pull request. |
 | Open a pull request | Posts one orientation comment for reviewers: what it does and a table of the changed files. Not a review. |
-| Ask it to mark a pull request ready | Waits for your approval of that exact change, then does it. Merging stays with you. |
+| Ask it to mark a pull request ready | Gives a GitHub handoff. A person alone marks it ready and merges. |
 
 Slack and Linear work the same way once connected. Other trackers are not built in: a chat request can pull an issue in through that tracker's MCP server.
 
@@ -32,17 +34,17 @@ request -> scope -> ground -> classify -> label -> [research] -> analyze -> [pla
 - The implementer works offline, with no credentials. Workflow code checks the exported patch (size, CI workflow files, protected files, credentials) and pushes it through Hubzoid. The agent never holds a GitHub token.
 - The reviewer is a separate agent in a fresh checkout of the pushed commit. Approval needs every acceptance criterion to pass.
 - The draft opens only when the branch, the pushed commit and the reviewed commit are the same.
-- Every run ends in an answer, a plan, a draft pull request or a stated stop reason with the next step.
+- Every run ends in an answer, a plan, a reviewed draft (`review_ready`) or a stated stop reason with the next step. Non-actionable work stops before planning or code; closed/merged PRs cannot be repaired.
 
 ## Get started
 
-You need Python 3.12, Git, Docker (for the sandboxes), and Claude Code or Codex signed in. No API key.
+You need Python 3.12, Git, a running Docker engine and one supported Claude Code or Codex runtime sign-in. Hosted/unattended authentication needs evidence for that exact combination.
 
-Paste this into Claude Code or Codex:
+Use the [builder skill](skills/setup-software-factory/SKILL.md) from Claude Code, Codex or Cowork with verified local capabilities. Paste:
 
 > Set up the Software Factory hub from this folder for my scratch repository OWNER/REPO. Read SETUP.md and follow it. Show me the settings, the GitHub permissions and the setup command before running anything against the repository. Connect GitHub with a token I type myself, run doctor, then show me a plan-only request. Do not merge anything.
 
-Or follow [SETUP.md](SETUP.md) yourself. It takes about ten minutes on the synthetic sample in [fixtures/](fixtures/), which has a planted rounding bug and a failing regression test: label issue #1 and watch it become a reviewed draft pull request.
+Or follow [SETUP.md](SETUP.md) yourself. The labelled sample in [fixtures/](fixtures/) has a planted rounding bug and a failing regression test. Use manual intake on a laptop; label events work only with actual verified webhook delivery. Setup time has not been measured on this revision.
 
 ## The folder
 
@@ -70,20 +72,21 @@ docs/                          settings, channels, architecture, security, opera
 
 1. Point it at your repository: set `FACTORY_REPO` in `hub.settings.yaml`, run `hubzoid hub configure . --check`, then connect GitHub for that repository.
 2. Put your setup command in `sandboxes/factory.yaml` (`setup.command`), for example `npm ci` or `uv sync --frozen`. It runs before the agent starts, with only package registries reachable.
-3. Save a team rule. Tell the chat agent "Remember for the team: run the tests with `pnpm test --runInBand`." It proposes the exact edit to `knowledge/factory-brain/<owner>-<repo>.md`, a hub manager applies it, and every station sees it on the next run. Chat on its own never becomes shared knowledge.
+3. Save a team rule. Bootstrap selected committed sources with `python scripts/factory_setup.py context` (see SETUP.md). Then tell the chat agent "Remember for the team: run the tests with `pnpm test --runInBand`." It proposes the exact edit to `knowledge/factory-brain/<owner>-<repo>.md`, a hub manager applies it, and every station sees it on the next run. Chat on its own never becomes shared knowledge.
 
 ## Safety
 
 - No merge tool, no push to the default or a protected branch, no repository administration.
 - Writes go only to `FACTORY_REPO`. Unattended work writes only on the issue or pull request it came from.
-- Attended implementation waits for the requester to approve the exact plan. Pull request updates wait for the requester to approve the exact change, at the pull request's current head.
+- Attended implementation waits for the requester to approve the exact plan. Supported pull request metadata edits wait for exact approval at the current head. Draft status is human-only in GitHub.
 - The person who asked decides. An administrator cannot approve for them.
 - Issue text, comments, repository files and web pages are data, never instructions. Hidden HTML comments and invisible characters are removed before a model reads them.
 - Details: [docs/security.md](docs/security.md).
 
 ## Costs and limits
 
-- Runs on your installed Claude Code or Codex login. Each station is one agent turn, so an implement request is about five agent turns plus small routing calls, more with research or revisions. Budgets are opt-in in Hubzoid.
+- Uses the selected installed runtime and its supported authentication. Each station is one agent turn, so an implement request is about five agent turns plus small routing calls, more with research or revisions. Budgets are opt-in in Hubzoid.
+- Terminal `review_ready` still means a draft PR. The factory never marks it ready or merges.
 - The reviewer uses the same vendor as the implementer by default. Set `engine: codex-local` in `agents/reviewer/AGENTS.md` for a cross-vendor review.
 - Sandboxes need Docker. Agent commands run offline after the setup command.
 - Questions or approvals from inside a station turn are not forwarded yet. Stations decide narrowly and record their choices.

@@ -3,7 +3,7 @@
 ## Running
 
 - Laptop: `hubzoid run . --port 8701 --bridge-port 8702` with `HUBZOID_SCHEDULES=1` in `.env`. Without it, work items never run.
-- Hosted: follow Hubzoid's Railway or Maritime guide (SDK `docs/deploy/`), with a GitHub App (not a personal token), `HUBZOID_PUBLIC_URL` set for webhooks, and a separate sandbox service when the host has no Docker. A Claude subscription token or a Codex login works for unattended runs.
+- Hosted: follow Hubzoid's Railway or Maritime guide (SDK `docs/deploy/`), with a GitHub App (not a personal token), `HUBZOID_PUBLIC_URL` set for webhooks, and a separate sandbox service when the host has no Docker. Record the exact supported runtime authentication for the qualified host row. A local login alone does not establish hosted/shared operation; see docs/qualification.md.
 - Pause new work with `FACTORY_INTAKE_ENABLED: false` (Setup in the Console, or `hub.settings.yaml`). Like every hub setting it applies when the hub restarts. Waiting decisions, recovery and cancellation continue. To stop GitHub events at once without a restart, pause the channel: Channels in the Console, or `hubzoid channels pause . github --expected-revision N`.
 
 ## Watching
@@ -31,10 +31,16 @@ Work belongs to the code that started it. Work interrupted or waiting across a c
 
 ## Upgrading Hubzoid
 
-Pin the Hubzoid version you tested. On each Hubzoid release, run the test suite and the evals against it before upgrading (`.github/workflows/ci.yml` does this on the SDK branch the hub is built on).
+Pin the Hubzoid version you tested. On each Hubzoid release, run the test suite and the evals against it before upgrading (`.github/workflows/ci.yml` uses the immutable requirements-sdk.txt pin).
 
 ## Costs
 
 - Model use: one agent turn per station call on your installed Claude Code or Codex login, plus short routing calls (scope, labels, research need, brain note). A plain implement request is about five agent turns, each revision adds two (implementer and reviewer).
-- No API key or second vendor by default. Budgets and limits are opt-in (Hubzoid `budgets.yaml`).
+- Reuse supported runtime authentication; no silent paid API fallback or second vendor requirement. Budgets and limits are opt-in (Hubzoid `budgets.yaml`).
 - Sandboxes: Docker containers with 2 CPUs and 2 GiB each by default (`sandboxes/factory.yaml`), at most four at once (`sandbox.yaml`).
+
+## Read-only source and rollback
+
+The SDK refuses in-place Hub proposals/activation on read-only source mounts. Prepare and review the source diff in the builder checkout, then redeploy that reviewed revision. Do not add a second mutable knowledge store. Keep source revision, SDK commit, databases, artifacts and external-operation receipts together in backup records. After restore, reconcile GitHub branch/PR state and uncertain operations before new writes. Restoring local data cannot undo a published branch or PR.
+
+Pause intake before an upgrade; keep old records readable, and resume only with a compatible source/SDK revision. A changed approved rule returns `context_changed` instead of silently continuing. New configuration fields remain optional for existing Hubs; these helpers do not require a new Git layout.

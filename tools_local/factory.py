@@ -105,7 +105,7 @@ def _status(work_item: str) -> dict:
     out = {"work_item": work_item, "state": view["state"], "reason": view.get("reason"), "route": view["route"],
            "stages": [s.get("stage") or s.get("name") for s in view.get("stages") or []], "link": _link(work_item)}
     for key in ("stage", "outcome", "stop_reason", "waiting", "plan_url", "branch", "pushed_sha", "pr_number",
-                "pr_url", "evidence_url", "reply"):
+                "pr_url", "evidence_url", "context_revision", "reply"):
         if rec.get(key) not in (None, ""):
             out[key] = rec[key]
     if rec.get("plan_url"):
@@ -166,8 +166,8 @@ async def start_factory_work(request: str, issue_number: int | None = None, rout
                              from_work_item: str | None = None) -> str:
     """Hand engineering work to the Software Factory as the person asking. It classifies, plans, implements in
     an isolated sandbox, gets an independent review and opens a draft pull request (it never merges). Use it
-    when the person asks to triage, plan, fix, build, change or revise something in the repository, or to mark
-    a factory pull request ready. Do not use it for questions you can answer by reading the repository.
+    when the person asks to triage, plan, fix, build, change or revise something in the repository, or to update
+    supported pull request metadata. Marking a draft ready and merging require the person in GitHub. Do not use it for questions you can answer by reading the repository.
 
     Args:
         request: The person's request in their own words, with any constraints they gave (for example "stop after

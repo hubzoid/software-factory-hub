@@ -5,7 +5,7 @@ Settings are declared in `settings.yaml` and set in `hub.settings.yaml`. Check w
 | Setting | Type and default | What it does |
 |---|---|---|
 | `FACTORY_REPO` | string, required | The GitHub repository, as `owner/name`. It must be one of the GitHub connection's repositories. The factory never switches repositories on its own. |
-| `FACTORY_LABEL` | string, `factory` | The issue label that hands an issue to the factory. Adding it starts unattended work that ends in a draft pull request. Keep it equal to `rules.label` in `channels/github.yaml`. |
+| `FACTORY_LABEL` | string, `factory` | The issue label that hands an issue to the factory. With verified webhook delivery, adding it starts unattended work ending in a reviewed draft. Laptop PAT mode uses manual intake until forwarding is configured. Keep it equal to `rules.label` in `channels/github.yaml`. |
 | `FACTORY_BRANCH_PREFIX` | string, `factory/` | Prefix of every branch the factory creates (`factory/12-bug-fix-total-1a2b3c`). A prefix is never proof of ownership: CI repairs need the factory's own record of the push. |
 | `FACTORY_BOT_NAME` | string, empty | The name people mention on GitHub. Empty uses the GitHub App's own name. Token mode needs it. |
 | `FACTORY_GITHUB_CONNECTION` | string, `github` | The GitHub channel connection id (`channels/<id>.yaml`). |
@@ -29,3 +29,11 @@ These are fixed policy, not options: no merge tool, no push to the default or a 
 - **The setup command** lives in the sandbox profile, `sandboxes/factory.yaml`, which is the reviewed file Hubzoid binds before any sandbox starts. A model can never change it.
 - **Pull request updates** are the write mode `github.pr_update: approve` in `work-items.yaml`.
 - **Who may ask** is Hubzoid access: the `wf_factory` workflow grant (or Run and control workflows), the channel's `allowed_groups`, and account links for Slack, Linear and GitHub mentions.
+
+## File settings, identity state and extensions
+
+Instructions, station/model choices, curated rules, tool policies, role bundles, connector definitions and supported appearance files are source configuration. Account identity, account links, individual grants, approvals and secret values remain in the SDK store. Console/CLI/API changes use the SDK's existing revision/operation mechanisms, never an independent writable copy. The setup helper neither creates grants nor activates shared knowledge. Local authoring trusts the machine owner; non-delegable setup credentials are deferred SDK hardening.
+
+Use the existing web app's supported branding/theme/layout settings. New arbitrary layouts, harnesses, authorization semantics or connectors require engineering; no hub setting pretends to implement them. Claude-only and Codex-only stations use identical domain tool contracts; a cross-vendor reviewer is optional. Raw MCP clients receive domain results/evidence, while their own prompts stay under their control.
+
+A curated-context revision is recorded with work and evidence. If approved root rules or the repository brief changes while a plan waits or runs, the factory conservatively stops with `context_changed`; request a fresh plan. It does not infer semantic equivalence of instructions or reuse old approval. Existing SDK operation/grant checks still apply at dispatch.

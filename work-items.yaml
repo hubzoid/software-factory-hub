@@ -9,6 +9,6 @@ work_items:
     kinds: [research-notes, analysis, evidence]
     max_characters: 200000
 write_modes:
-  # Every pull request update (title, body, base, close, ready for review) waits
-  # for the person who asked to approve the exact change. Nothing merges.
+  # Supported pull request metadata updates (title/body) wait
+  # for the person who asked to approve the exact change. Draft status and merge are human-only in GitHub.
   github.pr_update: approve
