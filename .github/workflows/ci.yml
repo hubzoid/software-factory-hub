@@ -24,8 +24,7 @@ jobs:
       - name: Unit tests (routes, policy, schemas, settings, patch check, intake, scope)
         if: matrix.suite == 'unit'
         run: python -m pytest -q tests --ignore=tests/integration --junitxml=output/unit.xml
-      - name: Pipeline tests (work items, stations, operations, channels, push; GitHub and models scripted;
-          two runs on the real workflow engine: a crash mid-review and an approval continuation)
+      - name: "Pipeline tests (work items, stations, operations, channels, push; GitHub and models scripted; two runs on the real workflow engine: a crash mid-review and an approval continuation)"
         if: matrix.suite == 'integration'
         run: python -m pytest -q tests/integration --junitxml=output/integration.xml
       - name: Schemas match the station result models
