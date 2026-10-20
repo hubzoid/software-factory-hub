@@ -492,16 +492,18 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
     raise FactoryStop("plan_changes_requested", "The plan was not approved.")
 
 
-def _context_current(r: Run) -> None:
+def _context_current(r: Run, *, observed: str | None = None, pushed_branch: str | None = None) -> None:
     """An approved plan cannot silently use a different shared rule revision.
 
     Stop conservatively and request a new plan; do not infer equivalence of
     arbitrary instructions or silently re-approve on the human's behalf.
     """
     expected = r.ground.get("context_revision")
-    if expected and brain.revision(_hub_dir(), r.repo.full_name) != expected:
+    current = observed if observed is not None else brain.revision(_hub_dir(), r.repo.full_name)
+    if expected and current != expected:
         raise FactoryStop("context_changed", "The shared repository rules changed while this work was running "
-                          "or waiting. Ask for a fresh plan and approve it before continuing.")
+                          "or waiting. Ask for a fresh plan and approve it before continuing.",
+                          details={"pushed_branch": pushed_branch} if pushed_branch else None)
 
 
 def _implement(r: Run) -> dict:
@@ -530,7 +532,10 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
     reviews: list[dict] = []
     revision = first_revision
     for cycle in range(cycles + 1):
-        _context_current(r)
+        # Save the observation, then decide outside the checkpoint. Recovery
+        # must not contradict a push/PR already recorded later in this run.
+        current = hub.work_item.checkpoint(routes.IMPLEMENT, lambda: brain.revision(_hub_dir(), r.repo.full_name))
+        _context_current(r, observed=current, pushed_branch=branch if head else None)
         if head:
             checkout = {"url": r.repo.clone_url, "ref": branch}
         else:
@@ -553,7 +558,7 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
         _drain(r)
 
         def pub(call=call, revision=revision, head=head) -> dict:
-            _context_current(r)
+            _context_current(r, pushed_branch=branch if head else None)
             if pr_number is not None:
                 from . import ci
 
@@ -624,16 +629,18 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
              pushed_sha: str, pr_number: int | None) -> dict:
     """Open one draft pull request bound to the reviewed SHA, or report on the
     existing one (a revision). Marking it ready and merging belong to a person."""
-    _context_current(r)
-    if pr_number is not None:
-        from . import ci
-
-        ci.require_open(r.repo, pr_number, expected_head=pushed_sha)
-
     def heads() -> dict:
-        return {"remote": github.branch_head(r.repo.repository_id, branch)}
+        return {"remote": github.branch_head(r.repo.repository_id, branch),
+                "context_revision": brain.revision(_hub_dir(), r.repo.full_name),
+                "pr_state": github.pull_request_state(r.repo.repository_id, pr_number)
+                if pr_number is not None else None}
 
     now = hub.work_item.checkpoint(routes.DELIVER, heads)
+    _context_current(r, observed=now["context_revision"], pushed_branch=branch)
+    if now["pr_state"] is not None:
+        from . import ci
+
+        ci.check_open(now["pr_state"], expected_head=pushed_sha)
     if now.get("remote") != pushed_sha:
         raise FactoryStop("head_changed", f"{branch} moved after the review. No pull request was opened.",
                           details={"pushed_branch": branch})

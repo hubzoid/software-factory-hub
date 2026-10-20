@@ -77,7 +77,7 @@ Prepare a candidate from the **active** SDK connection without replacing `channe
 python scripts/factory_setup.py connection
 ```
 
-The JSON result gives `candidate` and `expected_revision`. Inspect the candidate. It merges only Factory routing, preserves existing groups/credential references and paused/enabled state, and refuses unapplied local edits. Then run:
+The JSON result gives `candidate`, `expected_revision` and `changed_keys`. Inspect those keys and the candidate. On an existing Factory connection it fills missing defaults while preserving disabled triggers, custom routes and labels. Existing groups/credential references and paused/enabled state remain unchanged. It refuses unapplied local edits. If an existing label differs from `FACTORY_LABEL`, reconcile that setting explicitly. Doctor reports custom routes as a warning; runtime caller ceilings still apply. Then run:
 
 ```sh
 hubzoid channels validate . --file CANDIDATE

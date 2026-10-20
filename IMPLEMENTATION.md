@@ -20,26 +20,30 @@ Required local, real GitHub/Docker/runtime and Railway/Maritime rows remain qual
 
 ## Validation
 
-Tested source SDK: `c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c`. The core editable environment lacks GitHub dependencies. Tests used the existing `customer-desk-hub/.venv/bin/python` with `PYTHONPATH` explicitly pointing at current core source, not that environment's older editable SDK. An isolated `.venv/` dependency attempt was abandoned after offline-cache resolution failed; it is ignored, not part of delivery.
+Development install/CI pin: SDK `c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c`. Initial focused checks used this source: 12 integration passes, four setup passes after an explicit missing-grant fixture correction, and 214 policy passes (the earlier combined run was 217 passed/one setup failure). Settings validation, all ten eval declarations, schema regeneration and compile/diff checks passed. No real model eval was run.
 
-Confirmed commands/results before the RAM interruption:
+Root then ran the complete pre-review `tests/` suite sequentially against SDK `f99a22406a65c1306a48485b8182f77be1ac71fb`: **366 passed in 127.65 seconds**, observed RSS about 250 MB. JUnit includes all new non-actionable, closed/merged, context-change, old-plan and bootstrap cases plus slow workflow recovery tests. `pytest.ini` defines the slow marker but has no default deselection; neither CI partition excludes it. The superseded interrupted run is not counted separately as a pass.
 
-- Focused integration selection in `tests/integration/test_pipeline.py` and `test_ci_and_gates.py`: **12 passed**, 42 deselected. Covers non-actionable routes, closed/merged admission, closure during implementation, human-only ready, changed rules after plan approval, and the existing broker journey.
-- `tests/test_setup.py`: **4 passed** after the test explicitly demonstrated missing-grant denial followed by an administrator's legitimate grant. Covers safe inert connection composition, committed-source provenance, path escape, pending proposal reuse and no auto-activation.
-- Combined setup/policy run: **217 passed, one setup-fixture failure** because the local owner lacked the required grant. This comprises 214 policy cases and three successful setup cases. The fixture was corrected to assert that denial and grant explicitly; the four setup checks then passed. Do not count the earlier combined command as wholly passing.
-- `hubzoid hub configure . --check`: valid, no change. `hubzoid eval list .`: all ten declarations parsed; no real model eval was executed. Station schema regeneration from `workflows/factory` produced no schema diff. Compile check and `git diff --check` passed.
+The SDK pin and tested later SDK are deliberately named separately. Root verified a fresh clean installation of `requirements-sdk.txt` resolved exactly `c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c`, imported GitHubKit 0.16.1 and passed help/flag checks for all seven reviewed setup commands. `githubkit[auth-app]` is a base dependency on the pin; no extra was invented to compensate for a stale editable environment. Promotion still requires tagged SDK qualification. Provider, Docker, Cowork and hosting rows remain unqualified.
 
-The full hub regression was started with `pytest -q -m '' tests --timeout=180 --junitxml=output/tests.xml --tb=short`, including slow DBOS tests. Laptop RAM/freezing concerns interrupted work before a final result was captured. `output/tests.xml` is absent; the old exec session is no longer available and root confirmed no pytest processes remain. **The full regression is incomplete, not a pass.** No heavy exclusions are hidden.
+Implementation commit `280d0ab` received the entire-implementation Claude review. The bounded author corrections below passed root's sequential focused validation: **19 passed, 60 deselected in 23.21 seconds**. No second Claude approval is claimed. The complete pre-review suite was 366 passed; the relevant changed behavior was retested after the review fixes. No parallel model, browser or test workers were used.
 
-Two final safety refinements landed during that interval: old-plan reuse rejects a different context revision and shared status exposes the revision; repeated bootstrap refuses a conflicting pending proposal instead of returning stale content. Focused reruns for those refinements have no captured result and must run sequentially when root schedules checks. No further test/browser/Docker/model processes were launched after the RAM constraint.
+## Claude review dispositions
 
-Suggested sequential focused check before broader validation:
+1. **Fixed, necessary:** context observations at implementation-cycle entry and delivery now use saved checkpoints; delivery also saves PR state/head together. Checks compare saved observations outside checkpoints, preserving replay after recorded push/PR side effects. Publish-time live checks remain inside the saved publish step. `context_changed` reports a remaining pushed branch. Added crash-after-recorded-PR/delivery regressions with context activation and PR closure, plus a branch-detail check.
+2. **Verified non-defect:** slow tests were included in the 366-case run and are included by existing CI partitions. Required slow markers stay.
+3. **Verified clean install:** root installed the immutable pin from the remote requirements successfully and imported GitHubKit 0.16.1. GitHub dependencies are base requirements and Docker is in the sandbox extra. No unsupported dependency was added. Records distinguish this pin from the later SDK used by the full suite.
+4. **Upgrade instruction added:** before upgrade, inspect waiting/approved `github.updatePullRequest` operations containing a `draft` argument; reject/cancel them and reconcile ambiguity before resuming. No legacy mark-ready approval is carried forward. Existing SDK CLI/native decision surfaces are reused; no new migration/approval subsystem.
+5. **Fixed, necessary:** an existing Factory connection retains disabled flags, custom labels and routes via missing-default insertion. Candidate JSON lists changed keys. Doctor reports an intentional custom route instead of asking to overwrite it with sample defaults. Tests cover preservation and diagnosis.
+6. **Regression added:** the actual SDK export's `file_matches` becomes false after an unapplied connection-file edit; the helper must refuse and retain that edit. The key is present on the pinned SDK.
+7. **Verified and regression added:** root verified all seven commands against the fresh installed pin; in-process CLI help checks retain coverage without spawning a model, provider, daemon or child Python process.
+8. **Optional behavior unchanged:** revision work preserves a person's existing PR lifecycle status; operations docs distinguish that from the factory review result. Automatically re-analyzing a stale prior plan remains the safe behavior; additional supersession UX is deferred. Specific next steps were added for the four new stop reasons.
+
+Focused selection for root's next single test slot:
 
 ```sh
-PYTHONPATH="$FACTORY_SDK_SOURCE" "$FACTORY_TEST_PYTHON" -m pytest -q tests/test_setup.py tests/integration/test_pipeline.py tests/integration/test_review_fixes.py -k 'repeated_bootstrap or saved_correction_reanalyzes or status_says' --timeout=180 --tb=short
+PYTHONPATH="$FACTORY_SDK_SOURCE" "$FACTORY_TEST_PYTHON" -m pytest -q tests/integration/test_ci_and_gates.py tests/test_setup.py tests/test_doctor.py -k 'replay_after_recorded_pr_side_effect or changed_context_after_push or existing_factory_connection or connection_candidate or setup_commands or narrowed_factory_route' --timeout=180 --maxfail=1 --tb=short
 ```
-
-`FACTORY_SDK_SOURCE` identifies the intended core checkout; `FACTORY_TEST_PYTHON` is the already qualified dependency environment. Root controls further checks and the single entire-implementation Claude review. No commit or PR has been created by this authoring agent.
 
 ## Author inspection and handoff
 
@@ -49,9 +53,4 @@ PYTHONPATH="$FACTORY_SDK_SOURCE" "$FACTORY_TEST_PYTHON" -m pytest -q tests/test_
 - Foreman is the primary behavior reference; the existing broker and all five stations remain. User-only ready/merge intentionally narrows Foreman. Optional custom UI work, new connectors, cross-vendor requirements and stricter delegated credentials were omitted for the reasons above.
 - All six real qualification rows remain unqualified in `docs/qualification.md`. Docker daemon unavailable; no real GitHub/model/hosted/Cowork success is claimed. Provider resources and external tickets were not created.
 
-Source is frozen for root's sequential full regression, staged inspection and entire-implementation Claude review. Root owns further tests and any commit/PR; this authoring agent will make no more source edits until findings are returned. Remaining validation gaps are explicit; this is not a deployment-readiness claim.
-
-
-## Final sequential regression
-
-Root ran the complete `tests/` suite sequentially with low CPU priority, SDK f99a22406a65c1306a48485b8182f77be1ac71fb and the existing Customer test interpreter: **366 passed in127.65s**. Observed RSS about250MB. Initial bare pytest collected the separate sample fixture repository; corrected tests/ scope passed. No real-provider/model/Docker/hosted qualification inferred.
+Root completed focused validation and prepares the author-fix commit for draft PR #1. The fresh pinned-install environment was removed after saving its evidence. Remaining real-provider qualification gaps are explicit; this is not a deployment-readiness claim.

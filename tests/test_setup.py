@@ -30,6 +30,19 @@ def test_connection_composition_keeps_credentials_scope_and_paused_state():
     assert original["agent"] == "chat" and "workflow" not in original
 
 
+def test_existing_factory_connection_keeps_disabled_triggers_and_narrowed_routes():
+    original = {"provider": "github", "workflow": "factory", "enabled": False, "provider_config": {
+        "rules": {"label": "review-first", "mentions": False, "pr_opened": False, "ci_failure": False,
+                  "routes": {"label": "plan", "mention": "answer"}}}}
+    merged = setup.compose_connection(original, label="factory")
+    rules = merged["provider_config"]["rules"]
+    assert rules["label"] == "review-first"
+    assert rules["mentions"] is rules["pr_opened"] is rules["ci_failure"] is False
+    assert rules["routes"]["label"] == "plan" and rules["routes"]["mention"] == "answer"
+    assert "provider_config.rules.pr_opened" not in setup.changed_keys(original, merged)
+    assert "provider_config.rules.routes.ci_failure" in setup.changed_keys(original, merged)
+
+
 def test_connection_candidate_does_not_overwrite_or_activate(factory_hub, conn, capsys):
     from hubzoid.channels import config
 
@@ -39,8 +52,42 @@ def test_connection_candidate_does_not_overwrite_or_activate(factory_hub, conn, 
     candidate = config.load_file(factory_hub, Path(out["candidate"]))
     assert candidate.valid, candidate.errors
     assert out["expected_revision"] == conn.revision
+    assert "changed_keys" in out
     assert (factory_hub / "channels/github.yaml").read_bytes() == before
     assert config.active(factory_hub, "github").revision == conn.revision
+
+
+def test_connection_candidate_refuses_real_sdk_unapplied_file_edit(factory_hub, conn, capsys):
+    from hubzoid.channels import config
+
+    path = factory_hub / "channels/github.yaml"
+    edited = path.read_text().replace("pr_opened: true", "pr_opened: false")
+    assert edited != path.read_text()
+    path.write_text(edited)
+    assert config.export(factory_hub, "github")["file_matches"] is False
+    assert setup.main(["--hub", str(factory_hub), "connection"]) == 1
+    assert "unapplied edits" in json.loads(capsys.readouterr().err)["message"]
+    assert path.read_text() == edited and config.active(factory_hub, "github").revision == conn.revision
+
+
+@pytest.mark.parametrize("command,flags", [
+    (["channels", "github", "intake"], ["--url", "--task"]),
+    (["channels", "validate"], ["--file"]),
+    (["channels", "resume"], ["--expected-revision"]),
+    (["hub-changes", "show"], ["change_id"]),
+    (["hub-changes", "decide"], ["--decision"]),
+    (["work-items", "list"], ["--workflow", "--json"]),
+    (["hub", "settings"], ["--json"]),
+])
+def test_setup_commands_exist_in_the_selected_sdk(command, flags):
+    # In-process help only: no provider call, model, daemon or child process.
+    from typer.testing import CliRunner
+    from hubzoid.cli import app
+
+    result = CliRunner().invoke(app, [*command, "--help"], color=False)
+    assert result.exit_code == 0, result.output
+    for flag in flags:
+        assert flag in result.output, result.output
 
 
 @pytest.mark.slow

@@ -23,9 +23,10 @@
 
 ## Upgrading the hub
 
-1. Wait until no factory work is running or waiting (`hubzoid work-items list . --workflow factory --state running`), or let it finish.
-2. Pull the new hub version, run `hubzoid hub configure . --check` and `hubzoid hub doctor .`.
-3. Restart.
+1. Pause new intake. List both running and waiting work (`hubzoid work-items list . --workflow factory --json`), then inspect each waiting item with `hubzoid work-items show . ITEM --json`.
+2. **Before upgrading from an older Factory**, inspect waiting/approved `github.updatePullRequest` operations. If their arguments contain any `draft` field (especially `draft: false` from an old mark-ready request), the requester rejects the operation through the native decision surface, or an authorized manager cancels the entire item with `hubzoid work-items cancel . ITEM`. Recheck that it is cancelled/rejected and will not resume. Do not approve, restart or redrive those legacy mark-ready operations on either version. A person changes draft status in GitHub instead. If a write is ambiguous, reconcile its actual GitHub state before proceeding.
+3. Drain or explicitly resolve other running/waiting work. Pull the new hub version, run `hubzoid hub configure . --check` and `hubzoid hub doctor .`.
+4. Restart and resume intake only after checking the new revision and operation backlog. The upgrade is not a migration of old approvals into the new policy.
 
 Work belongs to the code that started it. Work interrupted or waiting across a code change stops as `needs_input` (`definition_changed`) instead of continuing on new code. Check what changed, then `hubzoid work-items restart . ITEM --reason "..."` continues after the last saved stage. A station call pins its definition: a changed station file makes a new call, never a different old one. Uncertain operations must be decided first. Nothing migrates on its own, approved plans are never rebased, and uncertain writes are never re-run.
 
@@ -44,3 +45,5 @@ Pin the Hubzoid version you tested. On each Hubzoid release, run the test suite 
 The SDK refuses in-place Hub proposals/activation on read-only source mounts. Prepare and review the source diff in the builder checkout, then redeploy that reviewed revision. Do not add a second mutable knowledge store. Keep source revision, SDK commit, databases, artifacts and external-operation receipts together in backup records. After restore, reconcile GitHub branch/PR state and uncertain operations before new writes. Restoring local data cannot undo a published branch or PR.
 
 Pause intake before an upgrade; keep old records readable, and resume only with a compatible source/SDK revision. A changed approved rule returns `context_changed` instead of silently continuing. New configuration fields remain optional for existing Hubs; these helpers do not require a new Git layout.
+
+Revisions preserve a human's existing PR draft/ready status; the factory never toggles it. `review_ready` on revision work describes the factory's exact-commit review result, not a claim that a previously readied PR became a draft again. Inspect the linked GitHub PR for its current lifecycle state.

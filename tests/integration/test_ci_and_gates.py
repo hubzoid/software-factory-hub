@@ -270,6 +270,67 @@ def test_cancelled_work_runs_no_more_stations(factory):
 
 
 @pytest.mark.slow
+@pytest.mark.parametrize("existing_pr", [False, True])
+def test_replay_after_recorded_pr_side_effect_keeps_its_saved_fences(factory, monkeypatch, existing_pr):
+    """A real SDK push/PR operation completed before the simulated crash.
+
+    Later context activation or PR closure cannot retroactively turn that
+    completed side effect into a stop or make recovery open a duplicate PR.
+    """
+    from software_factory import pipeline
+
+    if existing_pr:
+        rec = deliver_pr(factory)
+        item = red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="replay-after-delivery")
+    else:
+        item = factory.chat("Fix total and get an independent review", issue=12, key="replay-after-create")
+    real, crashed = pipeline._done, []
+
+    def die_before_done(r, result, *args, **kwargs):
+        if result == "review_ready" and not crashed:
+            crashed.append(True)
+            raise SystemExit("power cut after recorded GitHub operation")
+        return real(r, result, *args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "_done", die_before_done)
+    with pytest.raises(SystemExit):
+        factory.run(item)
+    assert len(factory.api.pulls) == 1
+    assert any(op["name"] == "github.pushBranch" and op["state"] == "succeeded"
+               for op in factory.ops(item["id"]))
+    calls = len(factory.stations.calls)
+    (factory.hub_dir / "knowledge/factory-brain/example-co-widget.md").write_text(
+        "# Activated correction after delivery\nUse the updated verification command next time.\n")
+    if existing_pr:
+        factory.api.pulls[rec["pr_number"]].update(state="closed", merged=True)
+    out = factory.run(item)
+    assert outcome(out) == ("review_ready", None)
+    assert len(factory.api.pulls) == 1 and len(factory.stations.calls) == calls
+    assert sum(op["name"] == "github.pushBranch" for op in factory.ops(item["id"])) == 1
+    assert sum(method == "POST" and path.endswith("/pulls") for method, path, _ in factory.writes()) == 1
+
+
+@pytest.mark.slow
+def test_changed_context_after_push_names_the_remaining_branch(factory, monkeypatch):
+    from software_factory import stations
+
+    real = stations.call
+
+    def activate_after_review(agent, *args, **kwargs):
+        result = real(agent, *args, **kwargs)
+        if agent == "reviewer":
+            (factory.hub_dir / "knowledge/factory-brain/example-co-widget.md").write_text(
+                "# New team rule\nReview the changed policy before further work.\n")
+        return result
+
+    monkeypatch.setattr(stations, "call", activate_after_review)
+    out = factory.run(factory.label())
+    assert outcome(out) == ("stopped", "context_changed")
+    assert out["factory_v1"]["branch"] in out["reply"]
+    assert not factory.api.pulls
+
+
+@pytest.mark.slow
 @pytest.mark.parametrize("state,merged", [("closed", False), ("closed", True), ("open", True)])
 def test_closed_or_merged_pr_never_starts_ci_repair(factory, state, merged):
     rec = deliver_pr(factory)

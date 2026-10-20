@@ -86,7 +86,8 @@ def github(context) -> dict:
     routes = {k: cfg.rules.route(k) for k in WANT_ROUTES}
     wrong = {k: v for k, v in routes.items() if v != WANT_ROUTES[k]}
     if wrong:
-        problems.append("rules.routes should be " + json.dumps(WANT_ROUTES) + f" (now {json.dumps(routes)})")
+        notes.append("custom trigger routes differ from the sample defaults: " + json.dumps(wrong)
+                     + "; caller route ceilings still apply")
     if not conn.config.enabled:
         notes.append("paused (enabled: false), so GitHub events are recorded but start nothing")
     if cfg.mode == "pat":

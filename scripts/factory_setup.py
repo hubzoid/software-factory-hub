@@ -34,11 +34,31 @@ def compose_connection(active: dict, *, label: str) -> dict:
     out.pop("agent", None)
     provider = out.setdefault("provider_config", {})
     rules = provider.setdefault("rules", {})
-    rules.update(label=label, mentions=True, pr_opened=True, ci_failure=True)
-    rules.setdefault("routes", {}).update(ROUTES)
+    if active.get("workflow") == "factory":
+        for key, value in {"label": label, "mentions": True, "pr_opened": True, "ci_failure": True}.items():
+            rules.setdefault(key, value)
+        for key, value in ROUTES.items():
+            rules.setdefault("routes", {}).setdefault(key, value)
+    else:
+        rules.update(label=label, mentions=True, pr_opened=True, ci_failure=True)
+        rules.setdefault("routes", {}).update(ROUTES)
     # enabled and allowed_groups are deliberately preserved. This helper
     # must never silently enable intake or widen an existing connection.
     return out
+
+
+def changed_keys(before: dict, after: dict, prefix: str = "") -> list[str]:
+    """Leaf paths for the connection preview, including removed keys."""
+    changed = []
+    for key in sorted(before.keys() | after.keys()):
+        path = f"{prefix}.{key}" if prefix else key
+        if key not in before or key not in after:
+            changed.append(path)
+        elif isinstance(before[key], dict) and isinstance(after[key], dict):
+            changed.extend(changed_keys(before[key], after[key], path))
+        elif before[key] != after[key]:
+            changed.append(path)
+    return changed
 
 
 def repository_brief(checkout: Path, repository: str, sources: list[str], test_command: str) -> str:
@@ -124,6 +144,7 @@ def main(argv=None) -> int:
             target = folder / f"{args.connection}-factory.yaml"
             target.write_text(config.render(cfg), encoding="utf-8")
             print(json.dumps({"candidate": str(target), "expected_revision": active["revision"],
+                              "changed_keys": changed_keys(active["config"], cfg),
                               "enabled": cfg.get("enabled"), "network_writes": False,
                               "next": "Review the candidate, then use hubzoid channels apply with that revision. "
                                       "Resume explicitly if paused; PAT mode needs manual intake or verified forwarding."}))

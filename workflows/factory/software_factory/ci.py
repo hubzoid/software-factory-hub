@@ -109,10 +109,17 @@ def _pr(repo, number: int) -> dict:
 def require_open(repo, number: int, *, expected_head: str | None = None) -> dict:
     """Recheck provider state at admission, publication and delivery.
 
-    This read must not come from a saved stage: a PR can close while a
-    station runs or a workflow waits. Publication still leases the exact head.
+    Admission and publication call this within their saved observations:
+    check fresh state before a new side effect, then replay that saved step
+    without retroactively contradicting completed writes. Delivery validates
+    its saved heads observation with check_open. Publication leases the head.
     """
     state = github.pull_request_state(repo.repository_id, number)
+    return check_open(state, expected_head=expected_head)
+
+
+def check_open(state: dict, *, expected_head: str | None = None) -> dict:
+    """Validate a saved provider observation without rereading on replay."""
     if state["state"] != "open" or state["merged"]:
         raise FactoryStop("pull_request_closed", "The pull request is closed or merged. No automated revision "
                           "will be published; start a new request if more work is needed.")
