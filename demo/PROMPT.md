@@ -16,6 +16,14 @@ What you see:
 4. A draft pull request that fixes the rounding (sum first, round once), with the regression test passing, the reviewer's result for each acceptance criterion, and `Closes #1`.
 5. The wrap-up on the issue with the pull request link.
 
+## Try it with no accounts
+
+No GitHub account, no token and no Docker: a labelled GitHub stand-in and scripted sandbox stations, on your own machine. The classifier and the chat are your real Claude Code or Codex login. Paste this from the cloned folder:
+
+> Run the Software Factory locally with the stand-ins in tests/live (read tests/live/README.md first). Copy my Hubzoid test hub to a new folder, run tests/live/setup.sh on it with a state folder in /tmp, start the hub on port 8701, open it once, link the stand-in GitHub account with the command setup.sh prints, then label issue #1 with tests/live/deliver.py and watch the work item until it ends. Show me the issue's comments and the draft pull request from the stand-in's state, and run hubzoid hub doctor. Tell me which parts were stand-ins.
+
+What you see: the same journey as above on `example-co/widget`, with every stand-in labelled in its output and in doctor.
+
 ## For a person
 
 Follow `SETUP.md` steps 1 to 8. Time each step and note it.
