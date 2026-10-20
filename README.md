@@ -135,7 +135,8 @@ request -> scope -> ground -> classify -> label -> [research] -> analyze -> [pla
    manager applies it, and every station sees it on the next run.
 4. **How each stage works.** Each station is a page of instructions in
    `agents/<station>/AGENTS.md`: classifier, researcher, analyst, implementer
-   and reviewer. For a cross-vendor review, set `engine: codex-local` in
+   and reviewer. Edit it in your checkout and review the change like any
+   commit. For a cross-vendor review, set `engine: codex-local` in
    `agents/reviewer/AGENTS.md`.
 
 ## Safety
