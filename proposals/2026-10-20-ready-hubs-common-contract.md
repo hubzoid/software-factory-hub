@@ -1,4 +1,4 @@
-# Common contract for the three ready-made hub proposals
+# Common contract for the three ready-to-use hub proposals
 
 Status: Draft for founder approval. Date: 20 October 2026. This is a supporting part of the three hub proposals, not approval to implement, deploy, publish, spend or contact anyone.
 
