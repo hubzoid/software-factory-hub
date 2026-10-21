@@ -1,2 +1,0 @@
-# Development evidence pin. Promote only with a qualified tagged SDK release.
-hubzoid[sandbox] @ git+https://github.com/hubzoid/hubzoid@c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c

@@ -7,7 +7,7 @@
 
 ## Run it
 
-You need the SDK revision pinned in `requirements-sdk.txt` (on `PYTHONPATH` or installed), a Claude Code or Codex login, and a copy of a Hubzoid test hub whose `.env` sets `MODEL=claude-local`.
+You need Hubzoid 2.0 or later from `requirements.txt` (on `PYTHONPATH` or installed), a Claude Code or Codex login, and a copy of a Hubzoid test hub whose `.env` sets `MODEL=claude-local`.
 
 ```sh
 cp -R HubzoidTestHub/test-hub ready-hubs/software-factory-local

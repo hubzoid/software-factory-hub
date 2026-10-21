@@ -54,7 +54,7 @@ git clone https://github.com/hubzoid/software-factory-hub software-factory
 cd software-factory
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-sdk.txt
+python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 

@@ -32,7 +32,7 @@ Work belongs to the code that started it. Work interrupted or waiting across a c
 
 ## Upgrading Hubzoid
 
-Pin the Hubzoid version you tested. On each Hubzoid release, run the test suite and the evals against it before upgrading (`.github/workflows/ci.yml` uses the immutable requirements-sdk.txt pin).
+`requirements.txt` accepts Hubzoid 2.0 or later. On each Hubzoid release, run the test suite and the evals against it before upgrading; `.github/workflows/ci.yml` runs them nightly against the latest 2.x release.
 
 ## Costs
 
