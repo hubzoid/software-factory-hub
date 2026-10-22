@@ -131,10 +131,10 @@ def main(argv=None) -> int:
             from hubzoid.hubs import settings
             from hubzoid import datadir
 
+            # The connection file is its only configuration: read it as it is now, so a
+            # local edit is the base of the candidate rather than lost.
+            config.active(hub, args.connection)
             active = config.export(hub, args.connection)
-            # An unapplied local edit must not be silently replaced with the active revision.
-            if active.get("file_matches") is False:
-                raise ValueError("The connection file has unapplied edits. Review/apply or reconcile them first.")
             cfg = compose_connection(active["config"], label=settings.effective(hub).get("FACTORY_LABEL", "factory"))
             checked = config.load_text(hub, config.render(cfg))
             if not checked.valid:

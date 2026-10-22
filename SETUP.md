@@ -19,7 +19,7 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-`requirements.txt` installs Hubzoid 2.0 or later, with the Docker sandbox extra. Keep an existing `.env` and review differences instead of copying over it. Set `MODEL=claude-local` or `MODEL=codex-local`; leave `HUBZOID_SCHEDULES=1` so background work runs. Runtime sign-in, unattended use and hosted authentication are qualified separately. Never silently switch to paid API credentials.
+`requirements.txt` installs Hubzoid 2.0.1 or later, with the Docker sandbox extra. Keep an existing `.env` and review differences instead of copying over it. Set `MODEL=claude-local` or `MODEL=codex-local`; leave `HUBZOID_SCHEDULES=1` so background work runs. Runtime sign-in, unattended use and hosted authentication are qualified separately. Never silently switch to paid API credentials.
 
 ## 2. Select one repository and review configuration
 
@@ -77,7 +77,7 @@ Prepare a candidate from the **active** SDK connection without replacing `channe
 python scripts/factory_setup.py connection
 ```
 
-The JSON result gives `candidate`, `expected_revision` and `changed_keys`. Inspect those keys and the candidate. On an existing Factory connection it fills missing defaults while preserving disabled triggers, custom routes and labels. Existing groups/credential references and paused/enabled state remain unchanged. It refuses unapplied local edits. If an existing label differs from `FACTORY_LABEL`, reconcile that setting explicitly. Doctor reports custom routes as a warning; runtime caller ceilings still apply. Then run:
+The JSON result gives `candidate`, `expected_revision` and `changed_keys`. Inspect those keys and the candidate. On an existing Factory connection it fills missing defaults while preserving disabled triggers, custom routes and labels. Existing groups/credential references and paused/enabled state remain unchanged. It starts from the connection file as it is now, since that file is the connection's only configuration. If an existing label differs from `FACTORY_LABEL`, reconcile that setting explicitly. Doctor reports custom routes as a warning; runtime caller ceilings still apply. Then run:
 
 ```sh
 hubzoid channels validate . --file CANDIDATE

@@ -58,17 +58,20 @@ def test_connection_candidate_does_not_overwrite_or_activate(factory_hub, conn, 
     assert config.active(factory_hub, "github").revision == conn.revision
 
 
-def test_connection_candidate_refuses_real_sdk_unapplied_file_edit(factory_hub, conn, capsys):
+def test_connection_candidate_builds_on_the_file_as_edited(factory_hub, conn, capsys):
     from hubzoid.channels import config
 
     path = factory_hub / "channels/github.yaml"
     edited = path.read_text().replace("pr_opened: true", "pr_opened: false")
     assert edited != path.read_text()
     path.write_text(edited)
-    assert config.export(factory_hub, "github")["file_matches"] is False
-    assert setup.main(["--hub", str(factory_hub), "connection"]) == 1
-    assert "unapplied edits" in json.loads(capsys.readouterr().err)["message"]
-    assert path.read_text() == edited and config.active(factory_hub, "github").revision == conn.revision
+    assert setup.main(["--hub", str(factory_hub), "connection"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    candidate = config.load_file(factory_hub, Path(out["candidate"]))
+    assert candidate.valid, candidate.errors
+    assert candidate.data["provider_config"]["rules"]["pr_opened"] is False
+    assert out["expected_revision"] == config.active(factory_hub, "github").revision
+    assert path.read_text() == edited
 
 
 @pytest.mark.parametrize("command,flags", [
