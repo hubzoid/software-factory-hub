@@ -1,2 +1,2 @@
-# Hubzoid 2.0 or later, with Docker sandboxes for the stations.
-hubzoid[sandbox]>=2.0
+# Hubzoid 2.0.1 or later, with Docker sandboxes for the stations.
+hubzoid[sandbox]>=2.0.1
