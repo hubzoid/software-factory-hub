@@ -34,7 +34,7 @@ A person reviews the draft, marks it ready and merges.
 
 | You do | The factory does |
 |---|---|
-| Assign a task in Linear, or ask in Slack or the web chat | Plans the work and posts it back. You approve the exact plan in Hubzoid's **Waiting for you**. Then it builds, reviews and opens a draft pull request. |
+| Assign a task in Linear, or ask in Slack or the web chat | Plans the work and posts it back. You approve the exact plan in your Hubzoid **Inbox**. Then it builds, reviews and opens a draft pull request. |
 | Add the `factory` label to a GitHub issue | Runs on its own: classifies, plans, builds, reviews and opens a draft pull request, posting progress on the issue. Label events arrive through a GitHub App webhook. |
 | Mention it on an issue (`@your-app plan this`) | Answers, triages, plans or implements, depending on what you asked. |
 | Ask from Claude, ChatGPT or Codex over MCP | The same work as chat, with the plan waiting for your approval. |
@@ -74,7 +74,7 @@ In the web chat, ask, or start the same request with manual GitHub intake
 > Implement the fix for issue #1. Show me the plan first.
 
 The labelled sample in [`fixtures/`](fixtures/) has a planted rounding bug and a
-failing regression test. Approve the exact plan in **Waiting for you**, and you
+failing regression test. Approve the exact plan in your **Inbox**, and you
 get a reviewed draft pull request with the reviewer's result for each
 acceptance criterion. To see only a plan, ask *"Plan a fix for issue #1. Stop
 after the plan."* [Full setup →](SETUP.md)

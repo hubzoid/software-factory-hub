@@ -32,7 +32,7 @@ review       reviewer station in a fresh checkout of the pushed commit
 deliver      check branch head = pushed = reviewed, open the draft, evidence, wrap-up
 ```
 
-Revisions loop implement, publish and review with a new station revision each time. A stop at any point posts the reason and what remains.
+Revisions loop implement, publish and review with a new station revision each time. A stop at any point posts the reason and what remains. A revision a person asks for on the factory's pull request (a review comment or a mention) goes straight to the implementer without a fresh plan approval, as in the upstream template's Foreman: the person already approved the plan, every revision is reviewed again, nothing is merged without a person, and red CI repairs are bounded by `FACTORY_CI_ATTEMPTS`. Ask for new work when the change goes beyond the approved plan.
 
 The terminal outcome is `review_ready`, which remains a draft. Draft status and merge are human-only. Each run records its approved context digest; a changed root rule or repository brief blocks subsequent implementation/publication until a fresh plan.
 

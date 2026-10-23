@@ -3,16 +3,17 @@ version: 1
 # the placeholder ids with your workspace's, then:
 #   hubzoid channels apply . --file channels/linear.yaml --expected-revision absent
 #   hubzoid channels linear setup . linear        # prints the callback and webhook URLs to set in Linear
-#   hubzoid secrets set . --name LINEAR_CLIENT_SECRET --stdin
-#   hubzoid secrets set . --name LINEAR_WEBHOOK_SECRET --stdin
-#   hubzoid channels linear connect . linear --wait 300
+#   # a person puts LINEAR_CLIENT_SECRET=... and LINEAR_WEBHOOK_SECRET=... in this hub's .env (never in chat)
+#   hubzoid channels linear connect . linear --wait 300   # a workspace admin approves the app
+#   hubzoid channels link . linear --external-id <linear-user-id> --account <email>
+#   hubzoid channels resume . linear --expected-revision <rev>   # the file ships paused
 # Set FACTORY_LINEAR_CONNECTION: linear and add linear to FACTORY_CHANNELS. See docs/channels/linear.md in the SDK.
+# Who may start work here is a grant: "Start work from linear" in Settings, Agents, Software Factory, Access.
 id: linear
 provider: linear
 enabled: false
 workflow: factory
 run_as: linked_requester
-allowed_groups: [engineering]
 progress: true
 provider_config:
   organization_id: 11111111-1111-4111-8111-111111111111   # your workspace's UUID

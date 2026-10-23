@@ -13,14 +13,11 @@ The hub is being prepared for review. The table below is the required covering m
 
 Every row includes chat, durable workflow and MCP checks, context bootstrap and a saved correction, scoped teammate access/denial, revocation, failures and restart. Hosted rows also need public URLs and sign-in/MCP callbacks, data-root persistence, scheduler behavior, sleep/wake, backup/restore and upgrades. A blocked row remains a visible qualification gap. Other combinations may receive synthetic contract coverage but are not advertised as supported.
 
-## Authoring environment, 20 October 2026
+## Evidence so far
 
-- Hub baseline: `666c337e`; implementation branch: `codex/claude-led-reviewed-prs`.
-- Development install and CI pin SDK `c4bf1dbeaf0e498c364bfa1b1b97f10c7ae3c60c`; initial focused checks used this source. A fresh clean installation of `requirements-sdk.txt` succeeded at that exact resolved commit, imported GitHubKit 0.16.1 and verified all seven reviewed setup CLI help surfaces/flags. The final pre-review 366-case regression used SDK `f99a22406a65c1306a48485b8182f77be1ac71fb`. These are distinct evidence records; promotion still requires a qualified SDK tag containing dependencies.
-- Tests reused an existing dependency environment with `PYTHONPATH` explicitly selecting the intended SDK source. See `IMPLEMENTATION.md` for commands/results. `githubkit[auth-app]` is a base dependency of the pinned SDK; the `sandbox` extra supplies Docker. A stale local environment missing a dependency does not establish a broken package declaration.
-- Docker CLI is installed, but `docker info` fails because no daemon socket is available. No host-shell fallback was used. Real model-in-sandbox work is consequently unverified.
-- GitHub fixture writes use a local bare repository and scripted REST responses; model/station/human results are labelled doubles. Only this hub's eventual review PR is authorized for GitHub writes in this task, so no scratch GitHub issue/PR was created for qualification.
-- No Railway/Maritime account, container, paid resource or customer system was provisioned. Cowork capabilities and hosted/subscription authentication were not exercised. No such compatibility is claimed.
+- 20 October 2026, authoring: the full suite passed with scripted model, station, GitHub and human doubles and a local bare repository. That proves the pipeline's logic, not any provider row.
+- 22 to 23 October 2026, a hosted run on a Hubzoid 2.0.1 deployment (Linux VM, Docker sandbox, one Claude subscription runtime) connected to a real GitHub repository through a GitHub App. Proven: the mention gets the eyes reaction, the work is accepted and classified, the plan is posted on the issue and approved in the Inbox, and the implementer starts in a real sandbox. Found and fixed on the way: the sandbox had no commit identity, the default image refuses plain `pip install`, the chat link pointed at a hub path that does not exist, and `allowed_groups` on the GitHub connection did not decide who may start work (the `channel_github` grant does).
+- Linear and Slack have recorded-payload integration tests, not live runs. Railway, Maritime (the second hosting provider Hubzoid documents, next to Railway), Codex and Cowork rows have not been run.
 
 ## Local real journey checklist
 

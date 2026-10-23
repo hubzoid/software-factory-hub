@@ -128,4 +128,4 @@ Provider draft capabilities, runtime/authoring compatibility and any unavailable
 
 ## Context and references
 
-Direction: founder's 20 October 2026 priority list and `HubzoidAgent/AGENTS.md`. Engineering: `AGENTS.md`, `docs/PRODUCT_CONTEXT.md` and `skills/propose-change.md`. Existing decisions B029, B037, B038, B039 and B042 constrain approval, runtimes, reuse, hosting and code ownership. Newer founder direction in this proposal supersedes earlier ERP-first assumptions only if approved. These drafts do not synchronize unrelated planning documents or create tracking issues.
+Direction: the founder's 20 October 2026 priority list. Engineering: `AGENTS.md`, `docs/PRODUCT_CONTEXT.md` and `skills/propose-change.md` in the Hubzoid repository. Earlier product decisions constrain approval, runtimes, reuse, hosting and code ownership. Newer founder direction in this proposal supersedes earlier ERP-first assumptions only if approved. These drafts do not synchronize unrelated planning documents or create tracking issues.

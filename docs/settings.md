@@ -17,18 +17,17 @@ Settings are declared in `settings.yaml` and set in `hub.settings.yaml`. Check w
 | `FACTORY_REVIEW_CYCLES` | integer 0 to 2, `2` | Revisions allowed after the reviewer requests changes. At the cap the work stops as `review_unresolved` with the pushed branch left for a person. |
 | `FACTORY_CI_ATTEMPTS` | integer 0 to 2, `2` | CI repair attempts per factory branch, counted once per failing head and kept across restarts. |
 | `FACTORY_SANDBOX_PROFILE` | string, `factory` | The sandbox profile (`sandboxes/<id>.yaml`) for the analyst, implementer and reviewer. Its reviewed `setup.command` installs the repository's dependencies before the agent starts. The agent then works offline. |
-| `FACTORY_CONCURRENCY` | integer 1 to 16, `4` | How many work items run at once. Each branch always has one writer. |
 
 ## Not settings, on purpose
 
-These are fixed policy, not options: no merge tool, no push to the default or a protected branch, no unattended waiting on a person, replies only on the work's own thread, decisions only by the person who asked, a draft pull request bound to the reviewed commit, the factory brain at most 40,000 characters, handoffs at most 200,000 characters, titles at most 200.
+These are fixed policy, not options: no merge tool, no push to the default or a protected branch, no unattended waiting on a person, one writer per branch (a second change started on a branch while another is running stops without pushing, because every push is leased to the head the factory last pushed), replies only on the work's own thread, decisions only by the person who asked, a draft pull request bound to the reviewed commit, the factory brain at most 40,000 characters, handoffs at most 200,000 characters, titles at most 200.
 
 ## Where other choices live
 
 - **Engines and models** are per station, in `agents/<station>/AGENTS.md` (`engine:` and `model:`). By default every station uses the hub's runtime (`MODEL` in `.env`, `claude-local` or `codex-local`) and the reviewer shares the implementer's vendor. To make the review cross-vendor, set `engine: codex-local` in `agents/reviewer/AGENTS.md`.
 - **The setup command** lives in the sandbox profile, `sandboxes/factory.yaml`, which is the reviewed file Hubzoid binds before any sandbox starts. A model can never change it.
 - **Pull request updates** are the write mode `github.pr_update: approve` in `work-items.yaml`.
-- **Who may ask** is Hubzoid access: the `wf_factory` workflow grant (or Run and control workflows), the channel's `allowed_groups`, and account links for Slack, Linear and GitHub mentions.
+- **Who may ask** is Hubzoid access: the `wf_factory` workflow grant (or Run and control workflows), the `channel_<connection>` grant for each channel (for example `channel_github`), and account links for Slack, Linear and GitHub mentions.
 
 ## File settings, identity state and extensions
 

@@ -4,15 +4,16 @@ version: 1
 #   hubzoid channels validate . --file channels/slack.yaml
 #   hubzoid channels apply . --file channels/slack.yaml --expected-revision absent
 #   hubzoid channels slack manifest . slack --output slack-app-manifest.json   # create the Slack app from it
-#   hubzoid secrets set . --name SLACK_BOT_TOKEN --stdin
-#   hubzoid secrets set . --name SLACK_APP_TOKEN --stdin
+#   # a person puts SLACK_BOT_TOKEN=... and SLACK_APP_TOKEN=... in this hub's .env (never in chat)
+#   hubzoid channels link . slack --external-id <slack-user-id> --account <email>
+#   hubzoid channels resume . slack --expected-revision <rev>   # the file ships paused
 # Set FACTORY_SLACK_CONNECTION: slack and add slack to FACTORY_CHANNELS. See docs/channels/slack.md in the SDK.
+# Who may start work here is a grant: "Start work from slack" in Settings, Agents, Software Factory, Access.
 id: slack
 provider: slack
 enabled: false
 workflow: factory
 run_as: linked_requester
-allowed_groups: [engineering]
 subscriptions: on_accept
 progress: true
 provider_config:
