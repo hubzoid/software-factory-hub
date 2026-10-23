@@ -1,6 +1,6 @@
 """The factory pipeline end to end on the real SDK (work items, stations,
 operations, channels, push), with GitHub, the models and people scripted.
-Named after HUB-6 section 9's integration cases."""
+Named after the cases they prove."""
 from __future__ import annotations
 
 import pytest
@@ -231,7 +231,7 @@ def test_protected_file_change_is_published_with_a_caution(factory):
     factory.stations.changes = [{"requirements-dev.txt": "pytest==8.3.3\n"}]
     out = factory.run(factory.label())
     assert outcome(out) == ("review_ready", None)
-    assert "protected file" in factory.api.pulls[out["factory_v1"]["pr_number"]]["body"]
+    assert "Read that change carefully" in factory.api.pulls[out["factory_v1"]["pr_number"]]["body"]
 
 
 # -- follow-ups, intake and the answer route ------------------------------------------------
@@ -399,3 +399,44 @@ def test_saved_correction_reanalyzes_an_old_plan_before_implementation(factory):
     for station in ("classifier", "analyst", "implementer", "reviewer"):
         latest = [call for call in factory.stations.calls if call["name"] == station][-1]
         assert "empty input regression" in latest["message"]
+
+
+# -- provenance, channels and unexpected errors --------------------------------------------
+
+def test_api_work_claiming_a_red_ci_run_is_refused(factory):
+    """An API caller cannot get automatic CI repair by sending a channel-shaped payload."""
+    from hubzoid.work_items import service as wi
+
+    payload = {"channel": "github", "thread_id": "t", "delivery_id": "fake", "kind": "ci_failure",
+               "text": "Checks failed", "files": [], "data": {"head_sha": "abc", "head_branch": "factory/x"},
+               "origin": {"provider": "github", "coordinates": {"repository_id": h.REPO_ID, "number": 12,
+                                                                "full_name": h.FULL}}}
+    item, _ = wi.admit(factory.hub_dir, workflow="factory", key="api:spoof", route="revise", input=payload,
+                       requester=h.OWNER, origin={"source": "api", "surface": "api"})
+    out = factory.run(item)
+    assert outcome(out) == ("stopped", "untrusted_origin")
+    assert not factory.stations.calls and not factory.writes()
+
+
+def test_a_channel_missing_from_factory_channels_starts_nothing(factory):
+    (factory.hub_dir / "hub.settings.yaml").write_text(
+        "version: 1\nvalues:\n  FACTORY_REPO: example-co/widget\n  FACTORY_CHANNELS: [github]\n")
+    from hubzoid.hubs import settings
+
+    settings.forget()
+    out = factory.run(factory.chat("Fix total", issue=12))
+    assert outcome(out) == ("stopped", "channel_not_enabled") and not factory.stations.calls
+
+
+def test_an_unexpected_error_is_reported_on_the_issue_and_the_work_fails(factory, monkeypatch):
+    from software_factory import pipeline
+
+    def boom(r):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(pipeline, "_implement", boom)
+    item = factory.label()
+    with pytest.raises(RuntimeError):
+        factory.run(item)
+    note = [c["body"] for c in factory.api.comments.get(12, []) if "unexpected error" in c["body"]]
+    assert len(note) == 1 and "RuntimeError" in note[0] and "No push or pull request is recorded" in note[0]

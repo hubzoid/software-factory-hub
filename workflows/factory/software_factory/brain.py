@@ -3,7 +3,7 @@
 The upstream template keeps it in a Blob document overwritten whole
 (``agent/lib/factory-brain.ts``, ``update_factory_brain.ts``, MIT, Vercel).
 Here it is a hub file, ``knowledge/factory-brain/<owner>-<repo>.md``, changed
-only through Hubzoid's reviewed hub changes (HUB-92): a proposal with the
+only through Hubzoid's reviewed hub changes: a proposal with the
 exact edit, the file's base version, and a manager who applies it. Applied
 changes become one git commit. Unattended work never proposes: it adds a
 "Suggested factory brain note" line to its reply for a maintainer to record.

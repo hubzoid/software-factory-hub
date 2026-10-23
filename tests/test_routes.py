@@ -1,4 +1,4 @@
-"""The seven routes as data (HUB-6 section 6)."""
+"""The seven routes as data."""
 from software_factory import policy, routes
 
 

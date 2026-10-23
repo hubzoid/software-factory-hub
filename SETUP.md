@@ -37,14 +37,16 @@ secrets: {}
 ```
 
 ```sh
-hubzoid hub settings . --json
+hubzoid hub settings . --json          # note its "revision"
 hubzoid hub configure . --check
-hubzoid hub configure . --apply --expected-revision absent
+hubzoid hub configure . --apply --expected-revision REVISION
 ```
 
-Use the current revision from `hub settings` instead of `absent` on an existing setup. Show the person the diff, active settings, repository scope and intended external effects.
+A clone already has `hub.settings.yaml`, so pass the `revision` that `hub settings` printed. Show the person the diff, active settings, repository scope and intended external effects.
 
-Review `sandboxes/factory.yaml`: change only `setup.command` to the repository's locked dependency-install command, for example `npm ci`. It runs with the approved registry network before agent execution. Agent commands then run offline, without credentials. Never run an arbitrary setup command copied from issue text.
+Review `sandboxes/factory.yaml`. In `setup.command`, keep the two `git config` parts and replace the install with the repository's locked dependency-install command, for example `npm ci`, or `python3 -m pip install --break-system-packages -e .[dev]` for a Python project (the sandbox's Python refuses plain installs, and the sandbox is thrown away after the work). It runs with the approved registry network before agent execution. Agent commands then run offline, without credentials. Never run an arbitrary setup command copied from issue text.
+
+The `git config` parts give the implementer's commits an author. Once your GitHub App exists (step 3), use its bot so commits show as the App: `gh api 'users/APP-NAME%5Bbot%5D' --jq .id` gives the bot's id, then set `user.name 'APP-NAME[bot]'` and `user.email 'ID+APP-NAME[bot]@users.noreply.github.com'`. On Hubzoid 2.0.2 or later you can set the same values as `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`, `GIT_COMMITTER_NAME` and `GIT_COMMITTER_EMAIL` under `env:` instead.
 
 ```sh
 hubzoid sandbox profiles validate .
@@ -66,10 +68,27 @@ Limit it to that repository: Contents, Issues and Pull requests read/write; Meta
 
 For a hosted connection, the person creates/installs their own GitHub App and confirms the requested repository permissions:
 
+Start the hub first, at its public HTTPS address (`HUBZOID_PUBLIC_URL`, or `public_url` in the deployment's `hubzoid.yaml`): GitHub sends events there and returns there after creating the App. Then, with `--owner-type user` for a personal account:
+
 ```sh
-hubzoid channels github connect . github --owner OWNER --owner-type organization --name OWNER-factory --open
+hubzoid channels github connect . github --owner OWNER --owner-type organization --name OWNER-factory
 hubzoid channels github setup status . github
 ```
+
+Open the printed link while signed in to GitHub as the owner. GitHub creates the App and asks where to install it: choose only the repository. The App's private key and webhook secret go straight into the hub's secret store. `setup status` then says `ready`. Add the repository to the connection and check it:
+
+```sh
+hubzoid channels github configure . github --repository OWNER/REPO --expected-revision REVISION
+hubzoid channels doctor . github
+```
+
+Who may ask the factory from GitHub is a grant, not a file. Give each person "Start work from github" in Settings, Agents, Software Factory, Access (or `hubzoid grant EMAIL channel_github .`), and link their GitHub account so their @mentions run as them (`gh api users/LOGIN --jq .id` gives the id):
+
+```sh
+hubzoid channels link . github --external-id GITHUB-ID --account EMAIL
+```
+
+Only owners, members and collaborators of the repository are trusted. Other people's mentions are ignored without a reply. On a busy repository you may not want an orientation comment on every new pull request: `hubzoid channels github configure . github --set provider_config.rules.pr_opened=false --expected-revision REVISION`.
 
 Prepare a candidate from the **active** SDK connection without replacing `channels/github.yaml` or its secrets/scopes:
 

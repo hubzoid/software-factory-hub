@@ -16,9 +16,12 @@ network:
   agent: {mode: deny_all}
 # The reviewed setup command. It runs once per sandbox, before the agent starts,
 # with only the package registries reachable. A model can never change it.
-# The synthetic sample repository needs nothing beyond Python's standard library.
+# It also gives the checkout a commit identity: the implementer commits, and is
+# told never to set one itself. SETUP.md step 2 replaces it with your GitHub
+# App's bot. The default image's Python refuses plain installs (PEP 668); the
+# sandbox is thrown away after the work, so installing into it is safe.
 setup:
-  command: "python3 -m pip install --quiet --disable-pip-version-check -r requirements-dev.txt"
+  command: "git config user.name 'Software Factory' && git config user.email 'software-factory@example.invalid' && python3 -m pip install --quiet --disable-pip-version-check --break-system-packages -r requirements-dev.txt"
   cwd: repo
   timeout_seconds: 900
 env:

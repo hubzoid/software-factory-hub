@@ -11,6 +11,8 @@ HUB="$(cd "$1" && pwd)"
 STATE="$(mkdir -p "$2" && cd "$2" && pwd)"
 PY="${PY:-python3}"
 HUB_ID="$(basename "$HUB" | tr '[:upper:]' '[:lower:]')"
+"$PY" -c "import pytest" 2>/dev/null \
+  || { echo "The stand-ins reuse the test helpers: install pytest into $PY first (python3 -m pip install pytest)." >&2; exit 1; }
 
 echo "1. Hub files into $HUB"
 for d in agents skills knowledge workflows tools_local doctor quality evals sandboxes; do

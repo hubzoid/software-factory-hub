@@ -200,6 +200,7 @@ def channels(context) -> dict:
         from hubzoid.channels import config
     except Exception:  # noqa: BLE001
         return _row("warn", "Channels are not available in this Hubzoid install.")
+    paused = []
     for name, key in (("linear", "FACTORY_LINEAR_CONNECTION"), ("slack", "FACTORY_SLACK_CONNECTION")):
         if name not in (s.get("FACTORY_CHANNELS") or []):
             continue
@@ -211,8 +212,14 @@ def channels(context) -> dict:
             continue
         if conn.config.workflow != FACTORY:
             rows.append(f"{name}: connection {cid} does not start the factory workflow")
+        elif not conn.config.enabled:
+            paused.append(f"{name} ({cid})")
     if rows:
         return _row("fail", "; ".join(rows) + ".", "Apply the channel file (see channels/*.yaml.example).")
+    if paused:
+        return _row("warn", f"Paused, so its requests start no work: {', '.join(paused)}. The example files ship "
+                            "paused.", "Resume each after doctor passes: hubzoid channels resume . <id> "
+                                       "--expected-revision <rev>.")
     enabled = ", ".join(s.get("FACTORY_CHANNELS") or [])
     return _row("ok", f"Requests come from {enabled}. Other trackers are not built in: a chat request can pull an "
                       "issue in through that tracker's MCP server when one is connected.")

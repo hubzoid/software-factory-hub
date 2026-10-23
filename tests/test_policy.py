@@ -1,4 +1,4 @@
-"""The caller matrix and the 31 upstream GitHub tools (HUB-6 section 6)."""
+"""The caller matrix and the 31 upstream GitHub tools."""
 import pytest
 
 from software_factory import policy

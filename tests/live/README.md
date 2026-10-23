@@ -7,13 +7,13 @@
 
 ## Run it
 
-You need Hubzoid 2.0.1 or later from `requirements.txt` (on `PYTHONPATH` or installed), a Claude Code or Codex login, and a copy of a Hubzoid test hub whose `.env` sets `MODEL=claude-local`.
+You need Hubzoid 2.0.1 or later from `requirements.txt` (on `PYTHONPATH` or installed), `pytest` in the same environment (the stand-ins reuse the test helpers), a Claude Code or Codex login, and a copy of a Hubzoid hub whose `.env` sets `MODEL=claude-local`.
 
 ```sh
-cp -R HubzoidTestHub/test-hub ready-hubs/software-factory-local
-tests/live/setup.sh ready-hubs/software-factory-local /tmp/factory-local
+cp -R path/to/your-test-hub software-factory-local
+tests/live/setup.sh software-factory-local /tmp/factory-local
 . /tmp/factory-local/env.sh
-cd ready-hubs/software-factory-local && hubzoid run . --port 8701 --bridge-port 8702
+cd software-factory-local && hubzoid run . --port 8701 --bridge-port 8702
 ```
 
 Open http://127.0.0.1:8701 once, then link the stand-in GitHub account (setup.sh prints the exact command), and drive it:
@@ -23,4 +23,4 @@ python tests/live/deliver.py --hub-id software-factory-local --state /tmp/factor
 python tests/live/deliver.py --hub-id software-factory-local --state /tmp/factory-local ci 105     # a red check on that PR
 ```
 
-Chat ("Please fix issue #2"), Waiting for you, Work items and Setup work as on any hub. A real run needs a container runtime (Docker today, hosted sandboxes later), a GitHub App or token, and none of this.
+Chat ("Please fix issue #2"), the Inbox, Work items and Setup work as on any hub. A real run needs a container runtime (Docker today, hosted sandboxes later), a GitHub App or token, and none of this.

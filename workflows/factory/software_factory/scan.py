@@ -209,8 +209,8 @@ def check(patch: bytes) -> ScanResult:
         elif _match(path, DENY):
             result.refusals.append(f"{path} is never changed by the factory (CI workflows and git metadata).")
         elif _match(path, PROTECTED) or (path.startswith(".") and "/" in path and not path.startswith(".github/")):
-            result.cautions.append(f"{path} is a protected file. Check this change carefully before marking the "
-                                   "pull request ready.")
+            result.cautions.append(f"This pull request changes {path}, which shapes how the project is built, "
+                                   "released or described. Read that change carefully before marking it ready.")
     if _SYMLINK.search(text):
         result.refusals.append("The patch adds a symbolic link, which the factory never publishes.")
     if "GIT binary patch" in text or "\nBinary files " in text:

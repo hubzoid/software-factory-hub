@@ -3,7 +3,7 @@ pull request.
 
 The upstream template's CI loop (``agent/channels/github.ts:102-125, 201-221``, MIT,
 Vercel) trusts the branch prefix and counts its own comments, judged by the
-model. HUB-6 names both as weaknesses. Here a repair needs, freshly checked:
+model. Both are weak checks. Here a repair needs, freshly checked:
 
 * a pull request in the configured repository, not from a fork;
 * a branch the factory pushed itself (its ledger and the SDK's record of the

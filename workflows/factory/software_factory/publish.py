@@ -95,6 +95,15 @@ def _export(call_id: str) -> tuple[bytes, str, str]:
                       "Nothing was published.")
 
 
+def push_recorded(repo: github.Repo, branch: str, revision: int) -> bool:
+    """Whether this revision's push already happened (the process stopped
+    after the push and before its stage was saved)."""
+    from hubzoid.channels.github import operations
+
+    return operations.recorded("github.pushBranch", {"repository_id": repo.repository_id, "branch": branch},
+                               f"r{revision}") is not None
+
+
 def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: int, owner_item: str,
                    expected_head: str | None) -> Published:
     """Check and publish one implementer call's commits to `branch`."""
@@ -103,13 +112,9 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
     if not checked.ok:
         raise FactoryStop("patch_refused", "The change was not published: " + "; ".join(checked.refusals),
                           details=checked.to_json())
-    from hubzoid.channels.github import operations
-
     entry = ledger_get(repo.repository_id, branch)
     key = f"r{revision}"
-    replay = operations.recorded("github.pushBranch", {"repository_id": repo.repository_id, "branch": branch},
-                                 key) is not None
-    if replay:
+    if push_recorded(repo, branch, revision):
         # This exact push was already recorded (the process stopped before the
         # stage was saved): the SDK settles it from its record, with the same
         # arguments. The ledger may already show its result, so it is not

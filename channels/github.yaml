@@ -2,12 +2,12 @@ version: 1
 # The GitHub connection the factory reads and writes through. `hubzoid channels github connect`
 # fills in app_id, installation_id and repositories, and stores the credentials in the secret store.
 # Apply it with `hubzoid channels apply . --file channels/github.yaml --expected-revision absent`.
+# Who may start work here is a grant: "Start work from github" in Settings, Agents, Software Factory, Access.
 id: github
 provider: github
 enabled: false
 workflow: factory
 run_as: workflow
-allowed_groups: [engineering]
 progress: true
 provider_config:
   mode: app
