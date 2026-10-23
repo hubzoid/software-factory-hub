@@ -25,7 +25,7 @@ doctor:
     required: true
   - id: factory.channels
     entrypoint: doctor/checks.py:channels
-    timeout_seconds: 10
+    timeout_seconds: 20
     requires: [FACTORY_CHANNELS]
     required: false
   - id: factory.runtime

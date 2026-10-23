@@ -440,3 +440,30 @@ def test_an_unexpected_error_is_reported_on_the_issue_and_the_work_fails(factory
         factory.run(item)
     note = [c["body"] for c in factory.api.comments.get(12, []) if "unexpected error" in c["body"]]
     assert len(note) == 1 and "RuntimeError" in note[0] and "No push or pull request is recorded" in note[0]
+
+
+# -- a retry builds the plan its requester already approved -----------------------------------------
+
+def test_a_retry_builds_the_approved_plan_without_asking_again(factory):
+    """eve's Foreman: the plan was approved, the implementer could not finish,
+    and the same person asks again on the same issue. The approved plan is
+    built without a fresh plan or a second approval."""
+    factory.stations.committed = False
+    first = factory.run(factory.chat("Fix total", issue=12, key="try-1"))
+    assert outcome(first) == ("stopped", "implementation_not_pushed")
+    assert first["factory_v1"]["plan_approved"]["by"] == h.OWNER
+    plans_shown = len([s for s in factory.people.seen if s[0] == "plan"])
+    factory.stations.committed = True
+    again = factory.run(factory.chat("Implement the approved plan", issue=12, key="try-2"))
+    assert outcome(again) == ("review_ready", None)
+    assert len([s for s in factory.people.seen if s[0] == "plan"]) == plans_shown
+    assert names(factory).count("analyst") == 1
+    assert again["factory_v1"]["plan_approved"]["reused_from"] == first["factory_v1"]["work_item"]
+    assert again["factory_v1"]["branch"].startswith("factory/12-bug-total-is-off-by-one-")
+
+
+def test_a_new_request_after_a_pull_request_gets_a_fresh_plan(factory):
+    factory.run(factory.chat("Fix total", issue=12, key="done-1"))
+    plans_shown = len([s for s in factory.people.seen if s[0] == "plan"])
+    factory.run(factory.chat("Fix total again", issue=12, key="done-2"))
+    assert len([s for s in factory.people.seen if s[0] == "plan"]) == plans_shown + 1
