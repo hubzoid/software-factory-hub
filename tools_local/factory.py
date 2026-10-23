@@ -5,7 +5,7 @@ tools start the same durable ``factory`` work item every channel starts, as
 that signed-in person, and let them follow it. Starting work needs the
 person's grant to run the factory workflow (``wf_factory``) or to run and
 control workflows. Approvals never happen here: a plan or a pull request
-update waits for the person in Hubzoid (Waiting for you, or Work items).
+update waits for the person in Hubzoid (their Inbox, or Work items).
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 from agents import function_tool
@@ -33,6 +34,9 @@ def _who():
 
 def _link(item_id: str) -> str:
     base = (os.environ.get("HUBZOID_PUBLIC_URL") or "").rstrip("/")
+    # In a deployment with several hubs, a hub's own address is <site>/b/<hub>,
+    # which serves downloads only. Settings lives at the site root.
+    base = re.sub(r"/b/[^/]+$", "", base)
     path = f"/settings#/me/work/{_hub_dir().name.lower()}/{item_id}"
     return (base + path) if base else path
 
@@ -45,7 +49,8 @@ def _record(item_id: str) -> dict:
     return state.get(f"factory_v1:item:{item_id}") or {}
 
 
-def _start(request: str, issue_number: int | None, route: str, from_work_item: str | None, surface: str) -> dict:
+def _start(request: str, issue_number: int | None, route: str, from_work_item: str | None, surface: str,
+           show_plan_first: bool = False) -> dict:
     from hubzoid import _request_ctx
     from hubzoid.work_items import service
     from hubzoid.work_items.errors import WorkItemError
@@ -63,6 +68,8 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
         payload["subject"] = {"kind": "github_issue", "number": int(issue_number)}
     if from_work_item:
         payload["from_work_item"] = from_work_item
+    if show_plan_first:
+        payload["require_plan_approval"] = True
     turn = _request_ctx.get_turn_id() or ""
     chat = _request_ctx.get_chat_id() or ""
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
@@ -81,13 +88,13 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
         return {"refused": exc.message, "code": exc.code}
     from hubzoid.hubs import settings
 
-    gated = route in ("auto", "implement") and settings.effective(_hub_dir()).get("FACTORY_REQUIRE_PLAN_APPROVAL",
-                                                                                 True)
-    note = ("Nothing is built until you approve this work's plan under Waiting for you. A plan from earlier work "
+    gated = route in ("auto", "implement") and (show_plan_first or settings.effective(_hub_dir()).get(
+        "FACTORY_REQUIRE_PLAN_APPROVAL", True))
+    note = ("Nothing is built until you approve this work's plan in your Inbox. A plan from earlier work "
             "is reused as the starting point, never as an approval. " if gated else "")
     return {"work_item": item["id"], "state": item["state"], "created": created, "link": _link(item["id"]),
             "note": note + "The factory works in the background. Pull request updates wait for your approval under "
-                           "Waiting for you. Ask for its status any time."}
+                           "your Inbox. Ask for its status any time."}
 
 
 def _status(work_item: str) -> dict:
@@ -163,7 +170,7 @@ async def factory_repository() -> str:
 
 @function_tool
 async def start_factory_work(request: str, issue_number: int | None = None, route: str = "auto",
-                             from_work_item: str | None = None) -> str:
+                             from_work_item: str | None = None, show_plan_first: bool = False) -> str:
     """Hand engineering work to the Software Factory as the person asking. It classifies, plans, implements in
     an isolated sandbox, gets an independent review and opens a draft pull request (it never merges). Use it
     when the person asks to triage, plan, fix, build, change or revise something in the repository, or to update
@@ -175,11 +182,14 @@ async def start_factory_work(request: str, issue_number: int | None = None, rout
         issue_number: The GitHub issue or pull request number it is about, when they named one.
         route: auto (the factory decides from their words), triage, plan, implement, revise or act.
         from_work_item: To implement a plan an earlier factory request produced, that work item's id.
+        show_plan_first: True when they want to see and approve the plan before anything is built, even if the
+            hub does not require plan approval.
     """
     from hubzoid.access import current_identity
 
     surface = "mcp" if getattr(current_identity(), "surface", "") == "mcp" else "chat"
-    out = await asyncio.to_thread(_start, request, issue_number, route, from_work_item, surface)
+    out = await asyncio.to_thread(_start, request, issue_number, route, from_work_item, surface,
+                                  show_plan_first)
     return json.dumps(out)
 
 

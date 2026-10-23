@@ -1,7 +1,7 @@
 """Who may make the factory do what: caller classes and the action matrix.
 
 The upstream template's GitHub policies (``agent/lib/github/approval.ts``, MIT, Vercel) as
-data, with the named fixes from HUB-6 section 6:
+data, with these fixes:
 
 * a pull request summary session (P) can only post its own origin reply;
 * a state change bundled with other issue fields must pass both policies;
@@ -59,7 +59,7 @@ ABSENT = ("mergePullRequest", "enablePullRequestAutoMerge", "createRelease", "de
           "createOrUpdateFileContents", "rerunWorkflow", "updateRepository")
 
 
-# -- the caller matrix (HUB-6 section 6) -------------------------------------------------
+# -- the caller matrix --------------------------------------------------------------------
 
 #: operation -> {caller: decision}. "intake" and "bound_pr" mean allow only on
 #: the issue or pull request the work came from.

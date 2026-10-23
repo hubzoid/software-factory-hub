@@ -47,6 +47,11 @@ REASONS = {
                       "Run checks, then ask again.",
     "pull_request_unconfirmed": "Check GitHub for a pull request from the branch. If there is none, open one from "
                                 "the branch or ask again.",
+    "untrusted_origin": "Start factory work from a connected channel, chat or MCP. A request cannot claim to be "
+                        "a channel event it did not come from.",
+    "channel_not_enabled": "An administrator adds this channel to FACTORY_CHANNELS in Setup, then you ask again.",
+    "unexpected_error": "An administrator opens the work item under Settings, My work items, reads the error and "
+                        "restarts or cancels it.",
 }
 
 

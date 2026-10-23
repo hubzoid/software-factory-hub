@@ -29,9 +29,6 @@ BAD = [
     ("FACTORY_REVIEW_CYCLES", -1),
     ("FACTORY_CI_ATTEMPTS", 5),
     ("FACTORY_SANDBOX_PROFILE", "Bad Profile"),
-    ("FACTORY_CONCURRENCY", 0),
-    ("FACTORY_CONCURRENCY", 17),
-    ("FACTORY_CONCURRENCY", "four"),
 ]
 
 
@@ -46,7 +43,7 @@ def test_the_shipped_values_and_defaults_are_valid():
         HUB, hub_settings.parse_values({"version": 1, "values": GOOD}), env={})[0]}
     assert resolved["FACTORY_LABEL"] == "factory" and resolved["FACTORY_BRANCH_PREFIX"] == "factory/"
     assert resolved["FACTORY_REVIEW_CYCLES"] == 2 and resolved["FACTORY_CI_ATTEMPTS"] == 2
-    assert resolved["FACTORY_REQUIRE_PLAN_APPROVAL"] is True and resolved["FACTORY_CONCURRENCY"] == 4
+    assert resolved["FACTORY_REQUIRE_PLAN_APPROVAL"] is True
     assert resolved["FACTORY_CHANNELS"] == ["chat", "mcp", "github"]
 
 

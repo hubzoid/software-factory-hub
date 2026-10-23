@@ -1,5 +1,5 @@
 """CI repair on factory branches, the ship gate, pull request orientation,
-uncertain writes and recovery (HUB-6 section 9)."""
+uncertain writes and recovery."""
 from __future__ import annotations
 
 import pytest
@@ -256,6 +256,58 @@ def test_recover_after_a_crash_between_stages(factory, monkeypatch):
     assert len(factory.stations.calls) == calls                     # the saved station results were reused
     pushes = [o for o in factory.ops(item["id"]) if o["name"] == "github.pushBranch"]
     assert len(pushes) == 1 and len(factory.api.pulls) == 1
+
+
+def test_revision_recovers_its_own_push_after_a_crash(factory, monkeypatch):
+    """A CI repair that dies after its push, before the stage is saved, must
+    settle that push on restart, not mistake its own new head for someone
+    else's."""
+    from software_factory import publish
+
+    rec = deliver_pr(factory)
+    item = red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="ci-crash")
+    real, crashes = publish.ledger_put, [1]
+
+    def die_after_push(*a, **kw):
+        if crashes:
+            crashes.pop()
+            raise SystemExit("power cut after the push")
+        return real(*a, **kw)
+
+    monkeypatch.setattr(publish, "ledger_put", die_after_push)
+    with pytest.raises(SystemExit):
+        factory.run(item)
+    assert factory.remote.head(rec["branch"]) != rec["pushed_sha"]  # the push happened
+    out = factory.run(item)
+    assert outcome(out) == ("review_ready", None)
+    assert factory.remote.head(rec["branch"]) == out["factory_v1"]["pushed_sha"]
+    assert sum(op["name"] == "github.pushBranch" for op in factory.ops(item["id"])) == 1
+
+
+def test_two_revisions_of_one_branch_never_overwrite_each_other(factory, monkeypatch):
+    """One writer per branch: another factory push lands while this
+    revision is being built, so this one stops and pushes nothing."""
+    from software_factory import publish, stations
+
+    rec = deliver_pr(factory)
+    item = red_ci(factory, rec["branch"], rec["pushed_sha"], rec["pr_number"], delivery="ci-race")
+    real, raced = stations.call, []
+
+    def other_writer_lands(agent, *a, **kw):
+        out = real(agent, *a, **kw)
+        if agent == "implementer" and not raced:
+            raced.append(factory.remote.commit_on(rec["branch"], {"calc.py": "x = 3\n"}, "other factory work",
+                                                  push=True)[2])
+            entry = publish.ledger_get(h.REPO_ID, rec["branch"])
+            publish.ledger_put(h.REPO_ID, rec["branch"], dict(entry, pushed_sha=raced[0], last_item="other"))
+        return out
+
+    monkeypatch.setattr(stations, "call", other_writer_lands)
+    out = factory.run(item)
+    assert out["factory_v1"]["outcome"] == "stopped"
+    assert out["factory_v1"]["stop_reason"] in ("head_changed", "stale_head")
+    assert factory.remote.head(rec["branch"]) == raced[0]            # the other push stands
+    assert not [op for op in factory.ops(item["id"]) if op["name"] == "github.pushBranch"]
 
 
 def test_cancelled_work_runs_no_more_stations(factory):

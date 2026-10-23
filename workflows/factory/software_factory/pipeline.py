@@ -94,14 +94,43 @@ def run() -> dict:
         return _stopped(r, stop)
     except github.FactoryRefused as refused:
         return _stopped(r, FactoryStop(refused.code, refused.message))
+    except Exception as exc:
+        if type(exc).__module__.split(".")[0] == "dbos":
+            raise                     # the workflow engine's own control flow (cancel, recovery)
+        _failed(r, exc)
+        raise
+
+
+def _failed(r: Run, exc: Exception) -> None:
+    """An error nobody planned for: tell the work's own thread what already
+    happened and what is unknown, then let the work item fail as it is. Never
+    claims that nothing was written: it lists what the record shows."""
+    done = []
+    if r.record.get("pushed_sha"):
+        done.append(f"the branch {r.record.get('branch')} was pushed at `{r.record['pushed_sha'][:12]}`")
+    if r.record.get("pr_number"):
+        done.append(f"draft pull request #{r.record['pr_number']} was opened")
+    lines = [f"The factory stopped on an unexpected error ({type(exc).__name__}).",
+             ("Already done: " + "; ".join(done) + ".") if done else
+             "No push or pull request is recorded for this work. Anything after the last recorded step is unknown.",
+             f"Next step: {FactoryStop('unexpected_error', '').next_step}"]
+    text = "\n\n".join(lines)
+    r.record.update(outcome="failed", stop_reason="unexpected_error", reply=text, finished=time.time())
+    try:
+        progress.record(outcome="failed", stop_reason="unexpected_error", reply=text)
+        progress.reply(text, key=_wrapup_key(text), kind="result")
+    except Exception:  # noqa: BLE001 - the original error is what the work item keeps
+        pass
 
 
 SNAPSHOT = {"FACTORY_REQUIRE_PLAN_APPROVAL": True, "FACTORY_REVIEW_CYCLES": 2, "FACTORY_CI_ATTEMPTS": 2,
-            "FACTORY_BRANCH_PREFIX": "factory/", "FACTORY_INTAKE_ENABLED": True}
+            "FACTORY_BRANCH_PREFIX": "factory/", "FACTORY_INTAKE_ENABLED": True,
+            "FACTORY_CHANNELS": ["chat", "mcp", "github"]}
 
 
 def _settings_now() -> dict:
     out = {k: hub.setting(k, default) for k, default in SNAPSHOT.items()}
+    out["FACTORY_CHANNELS"] = list(out["FACTORY_CHANNELS"] or [])
     out["FACTORY_REVIEW_CYCLES"] = max(0, min(2, int(out["FACTORY_REVIEW_CYCLES"])))
     out["FACTORY_CI_ATTEMPTS"] = max(0, min(2, int(out["FACTORY_CI_ATTEMPTS"])))
     out["FACTORY_BRANCH_PREFIX"] = out["FACTORY_BRANCH_PREFIX"] or "factory/"
@@ -110,8 +139,19 @@ def _settings_now() -> dict:
 
 # -- scope ----------------------------------------------------------------------------------
 
+def _origin(item_id: str) -> dict:
+    """Where the SDK recorded that this work came from, never what the input says."""
+    from hubzoid.work_items import store as wi_store
+
+    return (wi_store.get_item(_hub_dir(), item_id) or {}).get("origin_json") or {}
+
+
 def _scope(r: Run) -> None:
     item = hub.work_item
+    bad = intake.bind_origin(r.request, _origin(item.id))
+    if bad:
+        raise FactoryStop(bad, "This request claims to come from a channel event that the hub did not record, "
+                               "so the factory does not act on it.")
     # The ceiling is saved with the stage: a resumed execution sees the item
     # already narrowed, and must still replay the same steps.
     base = item.checkpoint(routes.SCOPE, lambda: {"settings": _settings_now(), "fixed": scope.fixed_route(item.route),
@@ -119,6 +159,9 @@ def _scope(r: Run) -> None:
     r.settings = base["settings"]
     if not r.settings["FACTORY_INTAKE_ENABLED"]:
         raise FactoryStop("intake_paused", "Intake is paused, so the factory is not starting new work.")
+    name = intake.channel_setting(r.request)
+    if name not in r.settings.get("FACTORY_CHANNELS", SNAPSHOT["FACTORY_CHANNELS"]):
+        raise FactoryStop("channel_not_enabled", f"This factory does not take requests from {name}.")
     fixed = base["fixed"]
     if fixed and fixed not in policy.route_ceiling(r.caller, r.request.trigger):
         raise FactoryStop("policy_denied", f"Route {fixed} is not available for this request.")
@@ -204,7 +247,7 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
         out["brain"] = brain.for_station(_hub_dir(), repo.full_name)
         out["context_revision"] = brain.revision(_hub_dir(), repo.full_name)
         if req.from_work_item:
-            out["prior"] = _prior_plan(req.from_work_item, r.requester, repo.full_name)
+            out["prior"] = _prior_plan(req.from_work_item, r.requester, repo.full_name, out.get("subject"))
         return out
 
     r.ground.update(hub.work_item.checkpoint(routes.GROUND, read))
@@ -215,10 +258,21 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
     _drain(r)
 
 
-def _prior_plan(item_id: str, requester: str, full_name: str) -> dict | None:
-    """The plan from an earlier factory work item of the same person and
-    repository ("implement the plan from work X"), with its base commit, and
-    its handoffs copied into this work item so the stations can open them."""
+def _plan_title(r: Run, version: int) -> str:
+    """What the approval card says: which issue, in a few words."""
+    subject = r.ground.get("subject") or {}
+    if subject.get("number"):
+        title = " ".join(str(subject.get("title") or "").split())[:70]
+        return f"Plan v{version} for #{subject['number']}" + (f": {title}" if title else "")
+    return f"Factory plan v{version}: {r.repo.full_name}"
+
+
+def _prior_plan(item_id: str, requester: str, full_name: str, subject: dict | None = None) -> dict | None:
+    """The plan from an earlier factory work item of the same person,
+    repository and issue ("implement the plan from work X"), with its base
+    commit, and its handoffs copied into this work item so the stations can
+    open them. A plan made for another issue is never reused: its number would
+    end up in this pull request's "Closes"."""
     from hubzoid.work_items import store as wi_store
 
     prior = wi_store.get_item(_hub_dir(), item_id)
@@ -226,6 +280,8 @@ def _prior_plan(item_id: str, requester: str, full_name: str) -> dict | None:
         return None
     result = ((prior.get("result_json") or {}).get("result") or {}).get("factory_v1") or {}
     if result.get("repository") != full_name or not result.get("analysis"):
+        return None
+    if subject and (result.get("subject") or {}).get("number") != subject.get("number"):
         return None
     if result.get("context_revision") != brain.revision(_hub_dir(), full_name):
         # Re-analyze after an approved correction; the old plan remains
@@ -458,7 +514,7 @@ def _publish_plan(r: Run, text: str) -> str | None:
 
 def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis) -> Analysis:
     """Attended implementation waits for the requester to approve the exact
-    plan (HUB-89 via the SDK's plan review). A changed plan is a new version
+    plan (the SDK's plan review). A changed plan is a new version
     that needs its own approval. Unattended label work shares the plan and
     proceeds within its original authorization."""
     text, _ = _plan_document(r, c, a, research)
@@ -467,10 +523,10 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
         return a
     for version in range(1, PLAN_REVISIONS + 2):
         path = _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.md"
-        progress.reply(f"The plan is waiting for your approval: {url or 'see Waiting for you in Hubzoid'}.",
+        progress.reply(f"The plan is waiting for your approval: {url or 'see your Inbox in Hubzoid'}.",
                        key=f"plan-wait:{version}", kind="question")
         progress.record(stage=routes.PLAN_REVIEW, waiting="plan_approval", plan_url=url)
-        decision = hub.review_plan(path, title=f"Factory plan v{version}: {r.repo.full_name}",
+        decision = hub.review_plan(path, title=_plan_title(r, version),
                                    approvers=[r.requester])
         r.record.setdefault("plan_decisions", []).append({"version": version, "digest": r.record["plan_digest"],
                                                           **decision})
@@ -559,7 +615,9 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
 
         def pub(call=call, revision=revision, head=head) -> dict:
             _context_current(r, pushed_branch=branch if head else None)
-            if pr_number is not None:
+            # A push already recorded for this revision moved the head itself,
+            # so recovery settles it instead of rechecking against the old head.
+            if pr_number is not None and not publish.push_recorded(r.repo, branch, revision):
                 from . import ci
 
                 ci.require_open(r.repo, pr_number, expected_head=head)
@@ -773,7 +831,7 @@ def _summarize(r: Run) -> dict:
 
 
 def _act(r: Run) -> dict:
-    """One named GitHub action (HUB-6 act route). Pull request updates wait
+    """One named GitHub action (the act route). Pull request updates wait
     for the requester's approval of the exact change (the SDK's
     github.pr_update write mode)."""
     act = scope.ActRequest.model_validate((r.record.get("scope") or {}).get("act") or {})

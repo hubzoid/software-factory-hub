@@ -1,4 +1,4 @@
-"""The factory's seven routes, as Hubzoid work-item routes (HUB-6 section 6).
+"""The factory's seven routes, as Hubzoid work-item routes.
 
 A route is a ceiling: the stages a work item may run and the external actions
 it may take. A run can narrow its route, never widen it. Intake picks the

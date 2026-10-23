@@ -103,3 +103,18 @@ def test_sandbox_row_follows_the_sdk_sandbox_doctor(factory_hub, monkeypatch, re
     assert row["status"] == status and words in row["summary"], row
     if status == "fail":
         assert row["recovery"] == "Start Docker, then run doctor again."
+
+
+def test_a_paused_linear_connection_is_a_warning(factory_hub, conn):
+    """The example files ship paused; doctor says so instead of passing."""
+    import yaml
+    from hubzoid.channels import config
+
+    data = yaml.safe_load((ROOT / "channels" / "linear.yaml.example").read_text())
+    for key in ("client_secret_ref", "webhook_secret_ref"):
+        data["provider_config"][key] = data["provider_config"][key].replace("software-factory", factory_hub.name)
+    config.apply(factory_hub, data, expected_revision="absent", actor="test-admin")
+    ctx = _context(factory_hub)
+    ctx["settings"].update(FACTORY_CHANNELS=["chat", "github", "linear"], FACTORY_LINEAR_CONNECTION="linear")
+    row = _checks().channels(ctx)
+    assert row["status"] == "warn" and "Paused" in row["summary"] and "linear (linear)" in row["summary"]

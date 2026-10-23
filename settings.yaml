@@ -60,9 +60,3 @@ settings:
     description: The sandbox profile (sandboxes/<id>.yaml) the analyst, implementer and reviewer use. Its setup command installs the repository's dependencies before the agent starts, offline.
     default: factory
     regex: '^[a-z0-9][a-z0-9_-]{0,63}$'
-  - name: FACTORY_CONCURRENCY
-    description: How many work items the factory runs at the same time (1 to 16). One writer per branch always.
-    type: integer
-    default: 4
-    minimum: 1
-    maximum: 16

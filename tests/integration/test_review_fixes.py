@@ -1,4 +1,4 @@
-"""Cases from the Codex review of the build (HUB-6 section 9 adds)."""
+"""Cases from the independent review of the build."""
 from __future__ import annotations
 
 import pytest
@@ -23,6 +23,21 @@ def test_an_explicit_plan_approval_request_beats_the_default(factory):
     set_values(factory, FACTORY_REQUIRE_PLAN_APPROVAL=False)
     factory.model.route = dict(factory.model.route, require_plan_approval=True)
     out = factory.run(factory.chat("Implement it, but let me approve the plan first", issue=12))
+    assert outcome(out) == ("review_ready", None)
+    assert [s for s in factory.people.seen if s[0] == "plan"]
+
+
+def test_show_plan_first_on_a_fixed_implement_route(factory):
+    """The chat tool's show_plan_first reaches the gate even when the route is
+    fixed, so the request is never read again by the model."""
+    from hubzoid.work_items import service as wi
+
+    set_values(factory, FACTORY_REQUIRE_PLAN_APPROVAL=False)
+    payload = {"source": "chat", "request": "Fix total, show me the plan first", "route": "implement",
+               "subject": {"kind": "github_issue", "number": 12}, "require_plan_approval": True}
+    item, _ = wi.admit(factory.hub_dir, workflow="factory", key="chat:show-plan-first", route="implement",
+                       input=payload, requester=h.OWNER, origin={"source": "chat", "surface": "web"})
+    out = factory.run(item)
     assert outcome(out) == ("review_ready", None)
     assert [s for s in factory.people.seen if s[0] == "plan"]
 

@@ -139,6 +139,30 @@ def _from_direct(p: dict) -> Request:
                    require_plan_approval=p.get("require_plan_approval") is True)
 
 
+#: The FACTORY_CHANNELS name for each source. The API is programmatic, like MCP.
+CHANNEL_SETTING = {"chat": "chat", "mcp": "mcp", "api": "mcp", "github": "github", "linear": "linear",
+                   "slack": "slack", "slack_assistant": "slack"}
+
+
+def channel_setting(request: Request) -> str:
+    return CHANNEL_SETTING.get(request.source, request.source)
+
+
+def bind_origin(request: Request, origin: dict | None) -> str | None:
+    """Check the request against where the SDK recorded that the work came
+    from. A payload shaped like a channel event counts as one only when a
+    channel started the work, from that same connection and provider; an API
+    or chat caller cannot claim a GitHub mention or a red CI run. Returns a
+    stop code, or None when the request is what it says."""
+    origin = origin or {}
+    claims_channel = request.source not in ("chat", "mcp", "api") or request.channel is not None
+    if origin.get("surface") != "channel":
+        return "untrusted_origin" if claims_channel else None
+    if not claims_channel or request.channel != origin.get("channel") or request.source != origin.get("provider"):
+        return "untrusted_origin"
+    return None
+
+
 def unattended(requester: str) -> bool:
     return requester.startswith("workflow:")
 
