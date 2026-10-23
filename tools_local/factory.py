@@ -90,8 +90,8 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
 
     gated = route in ("auto", "implement") and (show_plan_first or settings.effective(_hub_dir()).get(
         "FACTORY_REQUIRE_PLAN_APPROVAL", True))
-    note = ("Nothing is built until you approve this work's plan in your Inbox. A plan from earlier work "
-            "is reused as the starting point, never as an approval. " if gated else "")
+    note = ("Nothing is built until you approve this work's plan in your Inbox. A plan you already approved in "
+            "earlier work that stopped before a pull request is built without asking again. " if gated else "")
     return {"work_item": item["id"], "state": item["state"], "created": created, "link": _link(item["id"]),
             "note": note + "The factory works in the background. Pull request updates wait for your approval under "
                            "your Inbox. Ask for its status any time."}

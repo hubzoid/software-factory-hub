@@ -246,8 +246,12 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
         out["labels"] = [{"name": l.get("name"), "description": l.get("description")} for l in labels]
         out["brain"] = brain.for_station(_hub_dir(), repo.full_name)
         out["context_revision"] = brain.revision(_hub_dir(), repo.full_name)
-        if req.from_work_item:
-            out["prior"] = _prior_plan(req.from_work_item, r.requester, repo.full_name, out.get("subject"))
+        prior_item = req.from_work_item
+        if not prior_item and r.route == "implement" and r.attended and req.subject.kind == "github_issue" \
+                and number:
+            prior_item = _approved_retry(r.requester, repo.full_name, number)
+        if prior_item:
+            out["prior"] = _prior_plan(prior_item, r.requester, repo.full_name, out.get("subject"))
         return out
 
     r.ground.update(hub.work_item.checkpoint(routes.GROUND, read))
@@ -290,7 +294,30 @@ def _prior_plan(item_id: str, requester: str, full_name: str, subject: dict | No
     analysis = dict(result["analysis"])
     analysis["handoff_id"] = carry_handoff(item_id, analysis.get("handoff_id"))
     return {"work_item": item_id, "classification": result.get("classification"), "analysis": analysis,
-            "base_sha": result.get("base_sha")}
+            "base_sha": result.get("base_sha"),
+            # Its approval carries over only when it stopped before a pull request.
+            "approved": None if result.get("pr_number") else result.get("plan_approved")}
+
+
+def _approved_retry(requester: str, full_name: str, number: int) -> str | None:
+    """The same person's latest earlier work on this issue, when they approved
+    its plan and it stopped before a pull request (eve's Foreman: trust is
+    decided once, and a retry goes straight back to building). Later work that
+    delivered a pull request, or had no approved plan, means a fresh plan."""
+    from hubzoid.work_items import store as wi_store
+
+    me = wi_store.get_item(_hub_dir(), hub.work_item.id) or {}
+    for item in wi_store.list_items(_hub_dir(), me.get("hub") or "", workflow=me.get("workflow"),
+                                    requester=requester, limit=20):
+        if item["id"] == me.get("id"):
+            continue
+        result = ((item.get("result_json") or {}).get("result") or {}).get("factory_v1") or {}
+        if result.get("repository") != full_name or (result.get("subject") or {}).get("number") != number:
+            continue
+        if result.get("pr_number") or not result.get("plan_approved"):
+            return None
+        return item["id"]
+    return None
 
 
 def carry_handoff(from_item: str, handoff_id: str | None) -> str | None:
@@ -409,6 +436,7 @@ def _analyze(r: Run, c: Classification, research: Research | None, *, revision: 
     prior = (r.ground.get("prior") or {}).get("analysis")
     if prior and revision == 1:
         a = Analysis.model_validate(prior)
+        r.record["plan_reused_from"] = (r.ground.get("prior") or {}).get("work_item")
         r.record["base_sha"] = (r.ground.get("prior") or {}).get("base_sha") or r.record.get("base_sha")
     else:
         a, call = stations.call("analyst", stations.analyst_message(
@@ -486,7 +514,7 @@ def _output_dir() -> Path:
     return Path(datadir.resolve(_hub_dir(), Path("output") / "factory" / hub.work_item.id))
 
 
-def _publish_plan(r: Run, text: str) -> str | None:
+def _publish_plan(r: Run, text: str, *, post: bool = True) -> str | None:
     def write() -> str:
         target = _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.md"
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -508,7 +536,7 @@ def _publish_plan(r: Run, text: str) -> str | None:
     r.record["plan_url"] = url
     progress.stage(routes.ANALYZE, f"Plan ready: {len(r.record['analysis']['plan'])} steps, "
                                    f"{len(r.record['analysis']['acceptance_criteria'])} acceptance criteria."
-                   + (f" {url}" if url else ""), post=r.route == "implement")
+                   + (f" {url}" if url else ""), post=post and r.route == "implement")
     return url
 
 
@@ -518,12 +546,28 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
     that needs its own approval. Unattended label work shares the plan and
     proceeds within its original authorization."""
     text, _ = _plan_document(r, c, a, research)
-    url = _publish_plan(r, text)
-    if not (r.attended and (r.settings["FACTORY_REQUIRE_PLAN_APPROVAL"] or r.plan_approval_asked)):
+    needed = r.attended and (r.settings["FACTORY_REQUIRE_PLAN_APPROVAL"] or r.plan_approval_asked)
+    prior = r.ground.get("prior") or {}
+    earlier = prior.get("approved") if r.record.get("plan_reused_from") else None
+    if needed and earlier:
+        # The same person approved this exact plan in earlier work that stopped
+        # before a pull request, and the shared rules have not changed since.
+        url = _publish_plan(r, text, post=False)
+        r.record["plan_approved"] = dict(earlier, reused_from=prior.get("work_item"))
+        progress.record(plan_approved=r.record["plan_approved"])
+        progress.stage(routes.PLAN_REVIEW, f"Building the plan {earlier.get('by')} approved earlier "
+                                           f"(work {str(prior.get('work_item'))[:8]})."
+                       + (f" {url}" if url else ""))
+        return a
+    url = _publish_plan(r, text, post=not needed)
+    if not needed:
         return a
     for version in range(1, PLAN_REVISIONS + 2):
         path = _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.md"
-        progress.reply(f"The plan is waiting for your approval: {url or 'see your Inbox in Hubzoid'}.",
+        analysis = r.record["analysis"]
+        progress.reply(f"Plan v{version} is ready: {len(analysis['plan'])} steps, "
+                       f"{len(analysis['acceptance_criteria'])} acceptance criteria. Approve it in your Inbox in "
+                       f"Hubzoid" + (f": {url}" if url else "") + ".",
                        key=f"plan-wait:{version}", kind="question")
         progress.record(stage=routes.PLAN_REVIEW, waiting="plan_approval", plan_url=url)
         decision = hub.review_plan(path, title=_plan_title(r, version),
@@ -544,7 +588,7 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
             raise FactoryStop("plan_changes_requested", "The plan still needs changes: " + note)
         a = _analyze(r, c, research, revision=version + 1, notes=note)
         text, _ = _plan_document(r, c, a, research)
-        url = _publish_plan(r, text)
+        url = _publish_plan(r, text, post=False)
     raise FactoryStop("plan_changes_requested", "The plan was not approved.")
 
 
@@ -570,7 +614,8 @@ def _implement(r: Run) -> dict:
     a = _analyze(r, c, research)
     a = _plan_gate(r, c, research, a)
     branch = publish.branch_name(r.settings["FACTORY_BRANCH_PREFIX"], kind=c.type,
-                                 summary=c.summary, number=r.request.subject.number
+                                 summary=(r.ground.get("subject") or {}).get("title") or c.summary,
+                                 number=r.request.subject.number
                                  if r.request.subject.kind == "github_issue" else None, item_id=hub.work_item.id)
     r.record["branch"] = branch
     return _build_and_review(r, c, a, branch=branch, expected_head=None, owner_item=hub.work_item.id)
