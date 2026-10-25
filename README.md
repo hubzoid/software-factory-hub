@@ -37,19 +37,6 @@
 
 Every request is one work item. A restart resumes it from its last saved step, and nothing runs or posts twice. Every run ends in an answer, a plan, a reviewed draft or a stated stop reason with the next step. [Architecture](docs/architecture.md)
 
-## How work arrives
-
-| You do | The factory does |
-|---|---|
-| Ask in the web chat, or from Claude Code, ChatGPT or Codex over MCP | Plans the work. You approve the exact plan in your Hubzoid **Inbox**. Then it builds, reviews and opens a draft pull request. |
-| Assign a task in Linear, or ask in Slack | The same, with the plan posted back where you asked. |
-| Add the `factory` label to a GitHub issue | Runs on its own: classifies, plans, builds, reviews and opens a draft pull request, posting progress on the issue. |
-| Mention it on an issue (`@your-app plan this`) | Answers, triages, plans or implements, depending on what you asked. |
-| Let CI fail on a factory branch | Diagnoses and repairs it, at most twice per branch, on the same pull request. |
-| Open a pull request | Posts one orientation comment for reviewers: what it does and a table of the changed files. |
-
-Using another tracker? Ask in chat, and the factory pulls the issue in through that tracker's MCP server. [Channels](docs/channels.md)
-
 ## Quick start
 
 You need Python 3.12, Git, a running Docker engine, and Claude Code or Codex signed in on this machine. No API key. For the first run you also need a scratch GitHub repository you own.
@@ -95,20 +82,17 @@ You get a plan with acceptance criteria, built from a real checkout. Then ask *"
 
 The [builder skill](skills/setup-software-factory/SKILL.md) holds the same steps for your coding assistant. [Full setup](SETUP.md)
 
-## Connect your own repository
+## Integrations
 
-1. **Name the repository.** Set `FACTORY_REPO` in `hub.settings.yaml`, run `hubzoid hub configure . --check`, then `--apply`. The factory writes only to this repository.
-2. **Connect GitHub.** Create a GitHub App for label and mention intake, or start with a token you type yourself for chat and MCP intake. [SETUP.md](SETUP.md), step 3, lists the exact permissions.
-3. **Set the sandbox setup command.** In `sandboxes/factory.yaml`, replace the install in `setup.command` with your repository's locked install, for example `npm ci` or `uv sync --frozen`. It runs before the agent starts, with only package registries reachable. Never copy a setup command from issue text.
-4. **Teach it your repository.** Bootstrap a source-linked brief from committed files you choose:
+| Works with | What the factory does |
+|---|---|
+| GitHub | Label an issue `factory` and it runs on its own, posting progress on the issue. Mention it (`@your-app plan this`) to ask, triage, plan or implement. It repairs failing CI on its own branches, at most twice, and posts one orientation comment on each new pull request. |
+| Linear | Assign it a task. The plan comes back for you to approve in your Hubzoid **Inbox**. |
+| The web chat and Slack | Ask for work or its status. Plans wait for your approval in the **Inbox**. |
+| Claude Code, ChatGPT and Codex, over MCP | The same requests from your own assistant, with the plan waiting for your approval. |
+| Another tracker | Ask in chat, and the factory pulls the issue in through that tracker's MCP server. |
 
-   ```bash
-   python scripts/factory_setup.py context --checkout PATH --repository OWNER/REPO --source FILE --test-command 'CMD'
-   ```
-
-   Review the preview, then store it as a pending hub change for a hub manager to apply.
-
-Start with plan-only requests. Move to implementation once the plans read right. [SETUP.md](SETUP.md)
+Label and mention intake need a GitHub App. Chat and MCP intake can start with a token you type yourself. [Channels](docs/channels.md) · [SETUP.md](SETUP.md), step 3
 
 ## Make it yours
 
@@ -129,6 +113,14 @@ software-factory/
 ```
 
 Each station is one page of instructions. Edit it in your checkout and review the change like any commit.
+
+To point it at your own repository, set `FACTORY_REPO` in `hub.settings.yaml` and replace the install in `sandboxes/factory.yaml` with your repository's locked install, such as `npm ci` or `uv sync --frozen`. Then bootstrap a source-linked brief from committed files you choose:
+
+```bash
+python scripts/factory_setup.py context --checkout PATH --repository OWNER/REPO --source FILE --test-command 'CMD'
+```
+
+Review the preview, then store it as a pending hub change for a hub manager to apply. Start with plan-only requests, and move to implementation once the plans read right. [SETUP.md](SETUP.md), steps 2 and 4
 
 To save a team rule from chat, tell the factory *"Remember for the team: run the tests with `pnpm test --runInBand`."* It proposes the exact edit to `knowledge/factory-brain/<owner>-<repo>.md`, a hub manager applies it, and every station sees it on the next run. A correction in chat is not shared until that edit is applied. [Settings](docs/settings.md)
 
