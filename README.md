@@ -39,17 +39,15 @@ Every request is one work item. A restart resumes it from its last saved step, a
 
 ## Quick start
 
-You need Python 3.12, Git, a running Docker engine, and Claude Code or Codex signed in on this machine. No API key. For the first run you also need a scratch GitHub repository you own.
+You need Python 3.12, Git, a running Docker engine, and Claude Code or Codex signed in on this machine. No API key. For the first run you also need the GitHub CLI (`gh`) signed in, to create a private scratch repository for the sample.
 
-Paste this into Claude Code or Codex from the cloned folder:
+Paste this into Claude Code or Codex:
 
 ```text
-Set up the Software Factory hub from this folder for my scratch repository
-OWNER/REPO. Read SETUP.md and follow it. Show me the settings, the GitHub
-permissions and the setup command before running anything against the
-repository. Connect GitHub with a token I type myself, run doctor, then show me
-a plan-only request. After I approve a plan, implement it as a draft pull
-request. Do not merge anything.
+Clone https://github.com/hubzoid/software-factory-hub into a folder called
+software-factory, cd in, and follow demo/PROMPT.md to run the labelled sample
+on a new private scratch repository. Show me the plan before you build.
+Do not merge anything.
 ```
 
 Or by hand:
@@ -65,7 +63,15 @@ cp .env.example .env
 
 Keep the folder name `software-factory`: it is the hub's name, and the channel files use it. `.env` uses Claude Code (`MODEL=claude-local`). For Codex, set `MODEL=codex-local`.
 
-Point the factory at your scratch repository and connect GitHub ([SETUP.md](SETUP.md), steps 2 and 3). The labelled sample in [`fixtures/`](fixtures/) seeds it with a planted rounding bug and a failing regression test. Then check and start:
+Create the scratch repository from the labelled sample, with a planted rounding bug and a failing regression test, and add its issues:
+
+```bash
+cp -R fixtures/sample-repo ../factory-sample
+(cd ../factory-sample && git init -q -b main && git add -A && git commit -qm "Sample" && gh repo create factory-sample --private --source . --push)
+python demo/seed_issues.py OWNER/factory-sample
+```
+
+Point the factory at `OWNER/factory-sample` and connect GitHub ([SETUP.md](SETUP.md), steps 2 and 3). Then check and start:
 
 ```bash
 hubzoid hub doctor .
