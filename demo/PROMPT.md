@@ -1,6 +1,6 @@
 # The one-prompt demo
 
-From a fresh clone to a reviewed draft pull request on your explicitly authorized scratch repository. Measure the run; elapsed time is not yet qualified. All data is the labelled synthetic sample in `fixtures/`.
+From a fresh clone to a reviewed draft pull request on your explicitly authorized scratch repository. All data is the labelled synthetic sample in `fixtures/`.
 
 ## For Claude Code or Codex
 

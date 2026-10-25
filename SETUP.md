@@ -19,7 +19,7 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-`requirements.txt` installs Hubzoid 2.0.1 or later, with the Docker sandbox extra. Keep an existing `.env` and review differences instead of copying over it. Set `MODEL=claude-local` or `MODEL=codex-local`; leave `HUBZOID_SCHEDULES=1` so background work runs. Runtime sign-in, unattended use and hosted authentication are qualified separately. Never silently switch to paid API credentials.
+`requirements.txt` installs Hubzoid 2.0.1 or later, with the Docker sandbox extra. Keep an existing `.env` and review differences instead of copying over it. Set `MODEL=claude-local` or `MODEL=codex-local`; leave `HUBZOID_SCHEDULES=1` so background work runs. Unattended and hosted use need runtime authentication that your provider supports for that use. Never silently switch to paid API credentials.
 
 ## 2. Select one repository and review configuration
 
@@ -143,4 +143,4 @@ Then ask “Implement the fix for issue #NUMBER; show me the plan first.” Appr
 
 Grant the teammate access to this hub and `wf_factory` using the SDK's existing access controls; do not give connection or secret administration by default. Verify one allowed request and a denied account. Linked GitHub/Slack/Linear identities do not inherit rights from text in a ticket. Raw MCP tools use the same domain service and access checks; only delegated Hub-agent execution runs the Hub prompts. Follow the installed Hubzoid release's `docs/access-management.md` and `docs/mcp.md` for the concrete CLI/API connection and grant surface.
 
-[Settings](docs/settings.md) identifies file choices and engineering extensions. [Operations](docs/operations.md) covers pause/recovery/backup/upgrade; [qualification](docs/qualification.md) records which real combinations have actually been exercised. No provider hosting or Cowork success is established by a synthetic test run.
+[Settings](docs/settings.md) identifies file choices and engineering extensions. [Operations](docs/operations.md) covers pause/recovery/backup/upgrade.

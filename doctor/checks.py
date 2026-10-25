@@ -226,7 +226,7 @@ def channels(context) -> dict:
 
 
 def runtime(context) -> dict:
-    """Check the installed runtime binary; authentication and hosting need separate qualification."""
+    """Check the installed runtime binary; authentication and hosting are the operator's to confirm."""
     found = [name for name in ("claude", "codex") if shutil.which(name)]
     schedules = os.environ.get("HUBZOID_SCHEDULES")
     env_file = _hub(context) / ".env"
