@@ -20,7 +20,7 @@ For a founder showing the factory on a sales call. Synthetic data only. Rehearse
 
 ## Questions that come up
 
-- *Which model?* "The selected supported Claude or Codex runtime authentication; qualify hosted use separately. The reviewer can be a different vendor if you want."
+- *Which model?* "The selected supported Claude or Codex runtime authentication, one the provider supports for hosted use. The reviewer can be a different vendor if you want."
 - *Can it merge?* "No. There is no merge tool, and a person alone marks the draft ready in GitHub."
 - *What if it gets it wrong?* "The reviewer sends it back up to twice, then it stops and tells you why. The branch stays for a person. Nothing ever looks approved when it wasn't."
 - *Where does it run?* "Your laptop, or your own cloud. The selected model and sandbox providers still process what their configured runtime sends."

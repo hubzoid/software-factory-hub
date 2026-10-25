@@ -47,4 +47,4 @@ A follow-up from the person who asked, in the same thread or chat, reaches the n
 
 ## Other trackers
 
-Other trackers are not built in. If a tracker has an MCP server, connect it in Settings, then ask in chat ("pull task 86xyz into a factory request"). The chat agent reads the task with that server's tools and starts factory work as you. This path is not tested by the factory's own checks.
+Other trackers are not built in. If a tracker has an MCP server, connect it in Settings, then ask in chat ("pull task 86xyz into a factory request"). The chat agent reads the task with that server's tools and starts factory work as you.
