@@ -63,6 +63,8 @@ def github(context) -> dict:
     routes its triggers to the factory."""
     hub_dir = _hub(context)
     s = context["settings"]
+    if str(s.get("FACTORY_REPO") or "").startswith(("/", "~/")):
+        return _local_repository(hub_dir, s["FACTORY_REPO"])
     cid = s.get("FACTORY_GITHUB_CONNECTION") or "github"
     try:
         from hubzoid.channels import config
@@ -190,6 +192,21 @@ def write_modes(context) -> dict:
     if mode != "approve":
         return _row("warn", f"github.pr_update is {mode!r}: supported metadata edits cannot run after approval.", "Set github.pr_update: approve in work-items.yaml.")
     return _row("ok", "Pull request metadata updates wait for exact approval. A person alone marks drafts ready and merges in GitHub.")
+
+
+def _local_repository(hub_dir: Path, value: str) -> dict:
+    """Local repository mode needs no GitHub: FACTORY_REPO is a Git folder
+    with commits, on a branch."""
+    _workflow_code(hub_dir)
+    try:
+        from software_factory import local
+
+        repo = local.repo(value)
+    except Exception as exc:  # noqa: BLE001 - the row says what to do
+        return _row("fail", getattr(exc, "message", None) or str(exc),
+                    "Set FACTORY_REPO to the path of a Git folder with at least one commit.")
+    return _row("ok", f"Local repository {repo.local_path}, starting from the branch {repo.default_branch}. "
+                      "GitHub is not needed: each result is a reviewed branch in that folder.")
 
 
 def channels(context) -> dict:

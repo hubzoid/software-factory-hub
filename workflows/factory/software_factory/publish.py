@@ -98,6 +98,8 @@ def _export(call_id: str) -> tuple[bytes, str, str]:
 def push_recorded(repo: github.Repo, branch: str, revision: int) -> bool:
     """Whether this revision's push already happened (the process stopped
     after the push and before its stage was saved)."""
+    if repo.local_path:
+        return bool(((ledger_get(repo.repository_id, branch) or {}).get("imports") or {}).get(f"r{revision}"))
     from hubzoid.channels.github import operations
 
     return operations.recorded("github.pushBranch", {"repository_id": repo.repository_id, "branch": branch},
@@ -114,6 +116,9 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
                           details=checked.to_json())
     entry = ledger_get(repo.repository_id, branch)
     key = f"r{revision}"
+    if repo.local_path:
+        return _publish_local(repo, branch=branch, data=data, base_sha=base_sha, expected_head=expected_head,
+                              owner_item=owner_item, entry=entry, key=key, checked=checked)
     if push_recorded(repo, branch, revision):
         # This exact push was already recorded (the process stopped before the
         # stage was saved): the SDK settles it from its record, with the same
@@ -151,6 +156,34 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
     return Published(branch=branch, pushed_sha=out["head_sha"], previous_head=out.get("previous_head"),
                      base_sha=out.get("base_sha") or base_sha, commits=out.get("commits") or checked.commits,
                      html_url=out.get("html_url") or "", scan=checked.to_json())
+
+
+def _publish_local(repo: github.Repo, *, branch: str, data: bytes, base_sha: str, expected_head: str | None,
+                   owner_item: str, entry: dict | None, key: str, checked) -> Published:
+    """Local repository mode: the reviewed patch becomes a branch in the
+    person's own repository (local.import_branch). Same ownership rules as a
+    push: a new branch belongs to this work, a revision starts from the head
+    the factory wrote last."""
+    from . import local
+
+    entry = entry or {}
+    imports = dict(entry.get("imports") or {})
+    if expected_head is None and entry.get("owner_item") not in (None, owner_item):
+        raise FactoryStop("branch_owned_elsewhere", f"{branch} belongs to other factory work "
+                          f"({str(entry.get('owner_item'))[:8]}).")
+    if expected_head is not None and base_sha != expected_head:
+        raise FactoryStop("stale_head", f"The revision was made on {base_sha[:12]}, but {branch} was last written "
+                          f"at {expected_head[:12]}. Nothing was written.")
+    head = imports.get(key) or local.import_branch(repo.local_path, branch=branch, patch=data, base_sha=base_sha,
+                                                   expected_head=expected_head)
+    imports[key] = head
+    ledger_put(repo.repository_id, branch, dict(entry, owner_item=entry.get("owner_item") or owner_item,
+                                                branch=branch, repository_id=repo.repository_id,
+                                                local_path=repo.local_path, base_branch=repo.default_branch,
+                                                pushed_sha=head, imports=imports,
+                                                last_item=hub.work_item.id))
+    return Published(branch=branch, pushed_sha=head, previous_head=expected_head, base_sha=base_sha,
+                     commits=checked.commits, html_url="", scan=checked.to_json())
 
 
 def record_pull_request(repository_id: int, branch: str, number: int) -> None:

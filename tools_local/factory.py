@@ -148,6 +148,12 @@ def _repository() -> dict:
     from hubzoid.hubs import settings
 
     values = settings.effective(_hub_dir())
+    if str(values.get("FACTORY_REPO") or "").startswith(("/", "~/")):
+        return {"repository": values["FACTORY_REPO"], "mode": "local",
+                "note": "A folder on this computer, not a GitHub repository: there are no issues or pull requests, "
+                        "and the GitHub tools do not apply to it. The factory plans and builds changes on it and "
+                        "leaves each result as a reviewed local branch.",
+                "branch_prefix": values.get("FACTORY_BRANCH_PREFIX")}
     wanted = (values.get("FACTORY_REPO") or "").lower()
     cid = values.get("FACTORY_GITHUB_CONNECTION") or "github"
     try:

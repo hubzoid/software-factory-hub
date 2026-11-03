@@ -70,12 +70,13 @@ class Remote:
         git(seed, "push", "--quiet", "origin", "main")
         self.base = git(seed, "rev-parse", "HEAD").strip()
         self.n = 0
+        self.extra: list[Path] = []          # local clones whose branches a sandbox may start from
 
     @classmethod
     def attach(cls, root: Path) -> "Remote":
         """The same repository from another process."""
         r = cls.__new__(cls)
-        r.root, r.bare, r.n = root, root / "example-co" / "widget.git", 1000
+        r.root, r.bare, r.n, r.extra = root, root / "example-co" / "widget.git", 1000, []
         r.base = r.head("main")
         return r
 
@@ -97,6 +98,8 @@ class Remote:
         self.n += 1
         work = self.root / f"sandbox-{self.n}"
         subprocess.run(["git", "clone", "--quiet", str(self.bare), str(work)], env=GIT_ENV, check=True)
+        for source in self.extra:
+            git(work, "fetch", "--quiet", str(source), "+refs/heads/*:refs/remotes/extra/*")
         start = self.head(ref) or ref
         git(work, "checkout", "--quiet", "--detach", start)
         for path, text in files.items():
@@ -430,7 +433,10 @@ def stations_fake(monkeypatch, remote, factory_hub):
         call = st.get_call(hub_dir, owner_id)
         sid = f"box-{len(fake.boxes) + 1}"
         ref = (checkout or {}).get("ref") or "main"
-        commit = (checkout or {}).get("commit") or remote.head(ref)
+        url = (checkout or {}).get("url") or ""
+        folder = Path(url) if url.startswith("/") and Path(url).is_dir() else None   # local repository mode
+        commit = (checkout or {}).get("commit") or (git(folder, "rev-parse", f"refs/heads/{ref}").strip() if folder
+                                                    else remote.head(ref))
         fake.boxes[sid] = {"id": sid, "owner_id": owner_id, "agent": call["agent"], "ref": ref,
                            "commit": commit, "state": "ready", "live_key": sid}
         return {"id": sid}

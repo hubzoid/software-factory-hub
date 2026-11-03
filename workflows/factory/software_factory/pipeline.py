@@ -29,7 +29,7 @@ from pathlib import Path
 from hubzoid import hub
 from pydantic import BaseModel, Field
 
-from . import brain, evidence, github, intake, policy, progress, publish, routes, sanitize, scope, stations
+from . import brain, evidence, github, intake, local, policy, progress, publish, routes, sanitize, scope, stations
 from .errors import FactoryStop
 from .schemas import Analysis, Classification, Implementation, Research, Review
 
@@ -125,7 +125,7 @@ def _failed(r: Run, exc: Exception) -> None:
 
 SNAPSHOT = {"FACTORY_REQUIRE_PLAN_APPROVAL": True, "FACTORY_REVIEW_CYCLES": 2, "FACTORY_CI_ATTEMPTS": 2,
             "FACTORY_BRANCH_PREFIX": "factory/", "FACTORY_INTAKE_ENABLED": True,
-            "FACTORY_CHANNELS": ["chat", "mcp", "github"]}
+            "FACTORY_CHANNELS": ["chat", "mcp", "github"], "FACTORY_REPO": ""}
 
 
 def _settings_now() -> dict:
@@ -182,8 +182,24 @@ def _scope(r: Run) -> None:
         item.narrow(r.route)          # persisted before any station, tool or write
     if decided.get("issue_number") and r.request.subject.kind == "none":
         r.request.subject = intake.Subject(kind="github_issue", number=int(decided["issue_number"]))
+    if local.is_local(r.settings.get("FACTORY_REPO")):
+        _local_scope(r)
     r.record.update(route=r.route, scope=decided)
     progress.record(route=r.route, scope=decided)
+
+
+LOCAL_ROUTES = ("plan", "implement")
+
+
+def _local_scope(r: Run) -> None:
+    """Local repository mode plans and builds. Everything else here is about
+    GitHub issues and pull requests, which a local folder does not have."""
+    if r.request.subject.kind in ("github_issue", "github_pr"):
+        raise FactoryStop("local_mode", "This factory works on a folder on this computer, so there are no GitHub "
+                          "issues or pull requests to read. Describe the change in your own words instead.")
+    if r.route not in LOCAL_ROUTES:
+        raise FactoryStop("local_mode", "On a folder on this computer the factory plans and builds changes. "
+                          "Ask for a plan or a change.")
 
 
 # -- grounding ------------------------------------------------------------------------------
@@ -210,7 +226,9 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
         repo = github.repo()
         out: dict = {"repo": repo.__dict__, "labels": [], "duplicates": [], "subject_text": None}
         number = req.subject.number
-        if req.subject.kind == "github_issue" and number:
+        if repo.local_path:
+            pass                      # local repository mode: no issues, pull requests or labels
+        elif req.subject.kind == "github_issue" and number:
             ctx = github.read("getIssueContext", repository_id=repo.repository_id, number=number)["data"]
             issue = ctx.get("issue") or {}
             out["subject"] = {"number": number, "title": issue.get("title"), "state": issue.get("state"),
@@ -242,7 +260,8 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
             out["channel_context"] = req.data["linear_context"]
         out["subject_text"] = sanitize.deep(out["subject_text"])
         out["channel_context"] = sanitize.deep(out.get("channel_context"))
-        labels = github.read("listLabels", repository_id=repo.repository_id, page_size=100)["data"]
+        labels = [] if repo.local_path else github.read("listLabels", repository_id=repo.repository_id,
+                                                         page_size=100)["data"]
         out["labels"] = [{"name": l.get("name"), "description": l.get("description")} for l in labels]
         out["brain"] = brain.for_station(_hub_dir(), repo.full_name)
         out["context_revision"] = brain.revision(_hub_dir(), repo.full_name)
@@ -732,6 +751,9 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
              pushed_sha: str, pr_number: int | None) -> dict:
     """Open one draft pull request bound to the reviewed SHA, or report on the
     existing one (a revision). Marking it ready and merging belong to a person."""
+    if r.repo.local_path:
+        return _deliver_local(r, a, impl, review, branch=branch, pushed_sha=pushed_sha)
+
     def heads() -> dict:
         return {"remote": github.branch_head(r.repo.repository_id, branch),
                 "context_revision": brain.revision(_hub_dir(), r.repo.full_name),
@@ -814,6 +836,33 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
                 f"The branch {branch} is now at `{pushed_sha[:12]}`. {passing} Check before it merges: {look}.")
     text += (f"\n\nEvidence: {ev_url}" if ev_url else "") + note
     return _done(r, "review_ready", text)
+
+
+def _deliver_local(r: Run, a: Analysis, impl: Implementation, review: Review, *, branch: str,
+                   pushed_sha: str) -> dict:
+    """Local repository mode: the reviewed branch in the person's own
+    repository is the result. Nothing goes to GitHub."""
+    def heads() -> dict:
+        return {"local": local.branch_head(r.repo.local_path, branch),
+                "context_revision": brain.revision(_hub_dir(), r.repo.full_name)}
+
+    now = hub.work_item.checkpoint(routes.DELIVER, heads)
+    _context_current(r, observed=now["context_revision"], pushed_branch=branch)
+    if now["local"] != pushed_sha:
+        raise FactoryStop("head_changed", f"{branch} moved after the review, so it is not the reviewed change.",
+                          details={"pushed_branch": branch})
+    ev_path = hub.work_item.checkpoint(routes.DELIVER, lambda: str(evidence.save(_output_dir(), r.record)))
+    r.record.update(local_path=r.repo.local_path, evidence_path=ev_path)
+    progress.record(branch=branch, local_path=r.repo.local_path, evidence_path=ev_path)
+    note = _brain_note(r, a, impl, review)
+    cautions = (r.record.get("scan") or {}).get("cautions") or []
+    look = "; ".join(x.strip().rstrip(".") for x in cautions + impl.known_limitations[:3]) or "nothing unusual"
+    text = (f"The reviewed change is on the branch {branch} in {r.repo.local_path}, at `{pushed_sha[:12]}`. Your "
+            "working tree and current branch were not touched.\n\n"
+            f"{a.problem_statement.strip()} The independent reviewer approved that exact commit, with "
+            f"{len(a.acceptance_criteria)} of {len(a.acceptance_criteria)} acceptance criteria passing. Check "
+            f"before you merge it: {look}.\n\nTo look at it: git switch {branch}")
+    return _done(r, "review_ready", text + note)
 
 
 def _brain_note(r: Run, a: Analysis, impl: Implementation, review: Review) -> str:
@@ -952,8 +1001,10 @@ def _stopped(r: Run, stop: FactoryStop) -> dict:
             lines.append(f"{label}:\n" + "\n".join(f"- {x}" for x in items))
     branch = details.get("pushed_branch")
     if branch and r.record.get("pushed_sha"):
-        lines.append(f"The branch {branch} at `{r.record['pushed_sha'][:12]}` stays on GitHub for a person to look "
-                     "at. It was not approved and no pull request was opened.")
+        where = f"in {r.repo.local_path}" if r.repo and r.repo.local_path else "on GitHub"
+        lines.append(f"The branch {branch} at `{r.record['pushed_sha'][:12]}` stays {where} for a person to look "
+                     "at. It was not approved" + ("." if r.repo and r.repo.local_path else
+                                                  " and no pull request was opened."))
     lines.append(f"Next step: {stop.next_step}")
     text = "\n\n".join(lines)
     r.record.update(outcome="needs_clarification" if stop.code == "needs_clarification" else "stopped",

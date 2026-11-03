@@ -3,9 +3,9 @@ version: 1
 # Check them with `hubzoid hub configure . --check` and see them with `hubzoid hub settings .`.
 settings:
   - name: FACTORY_REPO
-    description: The GitHub repository the factory works on, as owner/name. It must be one of the repositories of the GitHub connection.
+    description: The repository the factory works on. Either owner/name on GitHub, one of the repositories of the GitHub connection, or the path of a Git folder on this computer (starting with / or ~/), which needs no GitHub and ends in a reviewed local branch.
     required: true
-    regex: '^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$'
+    regex: '^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}|~?/.+)$'
     example: example-org/factory-sample
   - name: FACTORY_LABEL
     description: The issue label that hands an issue to the factory. Adding it starts unattended work that ends in a draft pull request.

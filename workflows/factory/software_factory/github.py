@@ -39,6 +39,8 @@ class Repo:
     full_name: str
     default_branch: str
     clone_url: str
+    #: set in local repository mode: the folder, and clone_url is the same path
+    local_path: str | None = None
 
 
 def connection():
@@ -78,9 +80,14 @@ def _only_factory_repo(repository_id) -> None:
 
 def repo() -> Repo:
     """The configured repository, looked up through the connection by name,
-    then always used by its numeric id."""
+    then always used by its numeric id. A folder path is local repository
+    mode: no connection, the folder's current branch is the base."""
     from hubzoid.channels.github import client as gh
 
+    from . import local
+
+    if local.is_local(hub.setting("FACTORY_REPO")):
+        return local.repo(hub.setting("FACTORY_REPO"))
     conn = connection()
     wanted = (hub.setting("FACTORY_REPO") or "").lower()
     match = next((r for r in conn.settings.repositories or [] if r.full_name.lower() == wanted), None)
