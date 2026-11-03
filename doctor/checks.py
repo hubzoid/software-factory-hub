@@ -72,7 +72,7 @@ def github(context) -> dict:
         return _row("fail", f"The GitHub connection {cid!r} is not applied.",
                     f"Connect it: hubzoid channels github connect . {cid} --owner <org> --owner-type organization "
                     f"--name <app-name> --open (a hosted hub), or hubzoid channels github connect . {cid} --mode pat "
-                    f"--repository {s.get('FACTORY_REPO')} (a laptop). See SETUP.md, step 5.")
+                    f"--repository {s.get('FACTORY_REPO')} (a laptop). See SETUP.md, step 3.")
     cfg = conn.settings
     problems, notes = [], []
     if conn.config.workflow != FACTORY:

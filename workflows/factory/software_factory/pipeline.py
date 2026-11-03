@@ -25,6 +25,7 @@ import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 from hubzoid import hub
 from pydantic import BaseModel, Field
@@ -514,6 +515,16 @@ def _output_dir() -> Path:
     return Path(datadir.resolve(_hub_dir(), Path("output") / "factory" / hub.work_item.id))
 
 
+_LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def _shareable(url: str | None) -> str | None:
+    """Only links other people can open go into GitHub. On a laptop the plan and
+    evidence are served from 127.0.0.1; set HUBZOID_PUBLIC_URL to share them."""
+    host = urlparse(url).hostname if url else None
+    return None if host is None or host in _LOCAL_HOSTS else url
+
+
 def _publish_plan(r: Run, text: str, *, post: bool = True) -> str | None:
     def write() -> str:
         target = _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.md"
@@ -530,7 +541,7 @@ def _publish_plan(r: Run, text: str, *, post: bool = True) -> str | None:
                                        **({"audience": "people", "share_with": people} if people else {}))
         except Exception:  # noqa: BLE001 - the plan is still in the thread and the work item
             return None
-        return art.get("share_url") or art.get("url")
+        return _shareable(art.get("share_url") or art.get("url"))
 
     url = hub.work_item.checkpoint(routes.ANALYZE, share)
     r.record["plan_url"] = url
@@ -754,7 +765,7 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
         try:
             art = hub.publish_artifact(ev_path, title="Factory evidence",
                                        **({"audience": "people", "share_with": people} if people else {}))
-            return art.get("share_url") or art.get("url")
+            return _shareable(art.get("share_url") or art.get("url"))
         except Exception:  # noqa: BLE001
             return None
 

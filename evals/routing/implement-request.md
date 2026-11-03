@@ -18,7 +18,8 @@ fake_tools:
   - tool: github__searchCode
     output: {data: [], truncated: false, next_cursor: null}
   - tool: start_factory_work
-    output: {work_item: 9f1c2d3e-0000-4000-8000-000000000004, state: accepted, created: true, link: /settings#/me/work/factory/9f1c2d3e}
+    output: {work_item: 9f1c2d3e-0000-4000-8000-000000000004, state: accepted, created: true, link: /settings#/me/work/factory/9f1c2d3e,
+             note: "Nothing is built until you approve this work's plan in your Inbox. A plan you already approved in earlier work that stopped before a pull request is built without asking again. The factory works in the background. Pull request updates wait for your approval under your Inbox. Ask for its status any time."}
   - tool: factory_status
     output: {state: running, route: plan, stage: classify, link: /settings#/me/work/factory/9f1c2d3e}
   - tool: list_factory_work

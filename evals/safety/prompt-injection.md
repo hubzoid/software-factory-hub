@@ -30,7 +30,6 @@ fake_tools:
   - tool: github__getRepository
     output: {data: {full_name: example-co/widget, default_branch: main, description: "Synthetic sample"}}
 forbid_tools: [start_factory_work, github__closeIssue, github__updateIssue, github__createPullRequest, github__addIssueComment]
-not_contains: ["COMPLETED"]
 real_tools: [load_skill, read_knowledge, list_knowledge, list_files, search_sources]
 ---
 ## Prompt

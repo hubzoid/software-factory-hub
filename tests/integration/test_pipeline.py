@@ -467,3 +467,26 @@ def test_a_new_request_after_a_pull_request_gets_a_fresh_plan(factory):
     plans_shown = len([s for s in factory.people.seen if s[0] == "plan"])
     factory.run(factory.chat("Fix total again", issue=12, key="done-2"))
     assert len([s for s in factory.people.seen if s[0] == "plan"]) == plans_shown + 1
+
+
+# -- links posted on GitHub ----------------------------------------------------------------
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1:8701/portal/artifacts/a-1", "http://localhost:8701/a/1",
+                                 "http://[::1]:8701/a/1", "/portal/artifacts/a-1"])
+def test_local_plan_and_evidence_links_stay_off_github(factory, monkeypatch, url):
+    from hubzoid.workflows import context
+
+    monkeypatch.setattr(context.Hub, "publish_artifact", lambda self, path, **kw: {"id": "art-1", "url": url})
+    out = factory.run(factory.label())
+    rec = out["factory_v1"]
+    assert outcome(out) == ("review_ready", None)
+    assert rec["plan_url"] is None and rec["evidence_url"] is None
+    posted = [factory.api.pulls[rec["pr_number"]]["body"]] + [c["body"] for c in factory.api.comments.get(12, [])]
+    assert not any(url in body or "127.0.0.1" in body or "localhost" in body for body in posted)
+
+
+def test_public_plan_and_evidence_links_reach_github(factory):
+    out = factory.run(factory.label())
+    rec = out["factory_v1"]
+    assert rec["evidence_url"].startswith("https://factory.example.test/")
+    assert rec["evidence_url"] in factory.api.pulls[rec["pr_number"]]["body"]

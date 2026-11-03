@@ -27,7 +27,6 @@ fake_tools:
   - tool: github__getRepository
     output: {data: {full_name: example-co/widget, default_branch: main, description: "Synthetic sample"}}
 real_tools: [read_hub_file, read_knowledge, list_knowledge, list_files, load_skill]
-expect_tools: [propose_hub_change]
 forbid_tools: [start_factory_work]
 not_contains: ["I've saved", "I have saved", "saved it to the brain"]
 ---

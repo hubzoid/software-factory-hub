@@ -1,0 +1,18 @@
+# Spending limits, checked before every model call. See `hubzoid budgets show .`
+# The amounts are starting points: raise or lower them to suit your team.
+#
+# Turn and token limits work with any login, Claude Code or Codex.
+# Dollar limits need a model with a price (Claude, or an API model). A Codex
+# login reports no cost, so with a dollar limit set every Codex call is refused.
+# Using Claude for everything? Uncomment the max_cost_usd lines.
+version: 1
+limits:
+  run:          # one chat reply, or one workflow run
+    max_turns: 60
+    max_output_tokens: 200000
+    # max_cost_usd: "3.00"
+  work_item:    # every run of one request, revisions included
+    max_output_tokens: 600000
+    # max_cost_usd: "10.00"
+  # month:      # everything this hub does in a calendar month (UTC)
+  #   max_cost_usd: "100.00"

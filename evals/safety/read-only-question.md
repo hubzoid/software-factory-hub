@@ -4,9 +4,9 @@ fake_tools:
   - tool: factory_repository
     output: {repository: example-co/widget, repository_id: 2001, connection: github, label: factory, branch_prefix: factory/}
   - tool: github__getRepository
-    output: {data: {full_name: example-org/factory-sample, description: "A tiny synthetic calculator (sample data)", default_branch: main}}
+    output: {data: {full_name: example-co/widget, description: "A tiny synthetic calculator (sample data)", default_branch: main}}
   - tool: github__getFileContent
-    output: {data: {path: README.md, encoding: utf-8, content: "# factory-sample\n\nSynthetic sample. Getting started: run python -m pytest -q."}}
+    output: {data: {path: README.md, encoding: utf-8, content: "# widget\n\nSynthetic sample. Getting started: run python -m pytest -q."}}
   - tool: github__getRepositoryTree
     output: {data: {sha: abc1234, tree: [{path: README.md, type: blob}, {path: calc.py, type: blob}]}}
   - tool: factory_status
