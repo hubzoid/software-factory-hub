@@ -2,7 +2,7 @@
 name: Software Factory
 description: Takes engineering requests for its repository, from classification through planning, implementation and an independent review to a reviewed draft pull request. Answers questions about the repository.
 suggestions:
-  - Fix the failing test in tests/test_totals.py
+  - Fix the rounding bug in invoice totals
   - Make the discount error say which percent was passed
   - Add a short Reporting bugs section to the README
 ---

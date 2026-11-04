@@ -143,10 +143,21 @@ def test_doctor_reports_a_local_folder_without_github(folder, monkeypatch):
     (folder / "calc.py").write_text("changed\n")
     (folder / "notes.txt").write_text("new\n")
     row = checks.github({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(folder)}})
-    assert row["card"] == {"line": "~/mine", "detail": "Branch main, 2 uncommitted files"}
+    assert row["card"] == {"line": "~/mine", "detail": "Branch main, 2 uncommitted changes"}
+    real = local.subprocess.run
+
+    def slow(argv, *a, **kw):                      # a huge working tree: only the count is lost
+        if "status" in argv:
+            raise subprocess.TimeoutExpired(argv, kw["timeout"])
+        return real(argv, *a, **kw)
+
+    with monkeypatch.context() as m:
+        m.setattr(local.subprocess, "run", slow)
+        row = checks.github({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(folder)}})
+    assert row["status"] == "ok" and row["card"] == {"line": "~/mine", "detail": "Branch main"}
     row = checks.github({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(folder / "missing")}})
     assert row["status"] == "fail" and "does not exist" in row["summary"]
-    assert row["card"] == {"line": "~/mine/missing", "detail": "The folder does not exist."}
+    assert row["card"] == {"line": "~/mine/missing", "detail": "Folder not found"}
     long = checks._card("~/" + "a" * 70 + "/widget", path=True)["line"]
     assert len(long) == 60 and long.startswith("…") and long.endswith("/widget")
 
@@ -377,6 +388,31 @@ def _checks():
 def test_doctor_refuses_the_sample_inside_the_hub():
     row = _checks().github({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(HUB / "fixtures" / "sample-repo")}})
     assert row["status"] == "fail" and "inside the hub" in row["summary"]
+
+
+def test_doctor_card_says_why_a_folder_cannot_be_used(folder, tmp_path, monkeypatch):
+    """A few words for each refusal, never a cut sentence or a full path."""
+    checks = _checks()
+
+    def detail(repo) -> str:
+        row = checks.github({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(repo)}})
+        assert row["status"] == "fail" and "/" not in row["card"]["detail"], row
+        return row["card"]["detail"]
+
+    assert detail(HUB / "fixtures" / "sample-repo") == "Inside the agent's own folder"
+    (folder / "pkg").mkdir()
+    assert detail(folder / "pkg") == "Use the repository's top folder"
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    h.git(empty, "init", "--quiet")
+    assert detail(empty) == "No commits yet"
+    h.git(folder, "checkout", "--quiet", "--detach")
+    assert detail(folder) == "Not on a branch"
+    with monkeypatch.context() as m:
+        m.setenv("PATH", "/nonexistent")
+        assert detail(folder) == "Git is not installed"
+    # macOS: typed in another letter case, Git names the folder as it is on disk (last: Linux skips it).
+    assert detail(_other_case(folder)) == "Not on a branch"
 
 
 def test_doctor_says_the_github_channel_is_not_used_in_local_mode(folder):

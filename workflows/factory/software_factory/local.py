@@ -59,10 +59,10 @@ def _env() -> dict:
 
 
 def _git(repo: Path, *args: str, check: bool = True, data: bytes | None = None,
-         env: dict | None = None) -> subprocess.CompletedProcess:
+         env: dict | None = None, timeout: float = 300) -> subprocess.CompletedProcess:
     """Git with the repository's own hooks and filesystem monitor off."""
     argv = ["git", "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-C", str(repo), *args]
-    out = subprocess.run(argv, input=data, capture_output=True, timeout=300, env=env or _env())
+    out = subprocess.run(argv, input=data, capture_output=True, timeout=timeout, env=env or _env())
     if check and out.returncode != 0:
         raise subprocess.CalledProcessError(out.returncode, argv, out.stdout, out.stderr)
     return out

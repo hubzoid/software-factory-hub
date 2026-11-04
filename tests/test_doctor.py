@@ -66,6 +66,7 @@ def test_narrowed_factory_route_is_reported_without_restoring_sample_defaults(fa
     config.apply(factory_hub, active, expected_revision=conn.revision, actor="test-admin")
     row = _checks().github(_context(factory_hub))
     assert row["status"] == "warn" and "custom trigger routes" in row["summary"]
+    assert row["card"]["detail"] == "GitHub connected, check settings"
     assert config.export(factory_hub, "github")["config"]["provider_config"]["rules"]["pr_opened"] is False
 
 
@@ -77,6 +78,9 @@ def test_token_mode_says_whether_deliveries_are_verified(factory_hub, conn, webh
     assert ("no webhook secret" in row["summary"]) is (not webhook)
     assert "not verified" not in row["summary"]
     assert row["card"]["detail"] == "GitHub connected, token mode"
+    # Token mode delivers no events, so only an issue someone asks about comes in.
+    row = _checks().channels(_context(factory_hub))
+    assert row["card"]["detail"] == "GitHub issues come in by asking in chat"
 
 
 def test_channels_row_names_no_unsupported_tracker(factory_hub, conn):
@@ -129,19 +133,30 @@ def test_a_paused_linear_connection_is_a_warning(factory_hub, conn):
     assert row["status"] == "warn" and "Paused" in row["summary"] and "linear (linear)" in row["summary"]
 
 
-@pytest.mark.parametrize("schedules,card", [
-    ("1", {"line": "Work runs in the background", "detail": "Claude Code installed"}),
-    (None, {"line": "Background work is off", "detail": "Requests wait until it is turned on"}),
+ON = {"line": "Background work is on", "detail": "Runs queued and scheduled work"}
+OFF = {"line": "Background work is off", "detail": "Queued and scheduled work waits"}
+
+
+@pytest.mark.parametrize("cli,env,dotenv,card", [
+    (True, {"HUBZOID_SCHEDULES": "1"}, None, ON),
+    (True, {"HUBZOID_GATEWAY": "1"}, None, ON),                         # `hubzoid gateway` runs it too
+    (True, {}, "HUBZOID_SCHEDULES=on\n", ON),                           # the SDK's switch values
+    (True, {}, "# HUBZOID_SCHEDULES=1\n", OFF),                         # a commented-out line is not on
+    (True, {"HUBZOID_SCHEDULES": "1"}, "HUBZOID_SCHEDULES=0\n", OFF),    # the hub's .env wins, as at start
+    (False, {"HUBZOID_SCHEDULES": "1"}, None, {"line": "Background work can't run",
+                                               "detail": "Needs Claude Code or Codex"}),
 ])
-def test_background_work_card_says_whether_schedules_are_on(tmp_path, monkeypatch, schedules, card):
+def test_background_work_card_follows_the_sdk_switch(tmp_path, monkeypatch, cli, env, dotenv, card):
     checks = _checks()
-    monkeypatch.setattr(checks.shutil, "which", lambda name: "/usr/bin/claude" if name == "claude" else None)
-    if schedules:
-        monkeypatch.setenv("HUBZOID_SCHEDULES", schedules)
-    else:
-        monkeypatch.delenv("HUBZOID_SCHEDULES", raising=False)
+    monkeypatch.setattr(checks.shutil, "which", lambda name: "/usr/bin/claude" if cli and name == "claude" else None)
+    for key in ("HUBZOID_SCHEDULES", "HUBZOID_GATEWAY"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    if dotenv:
+        (tmp_path / ".env").write_text(dotenv)
     row = checks.runtime({"hub_dir": str(tmp_path), "settings": {}})
-    assert row["status"] == ("ok" if schedules else "warn") and row["card"] == card
+    assert row["status"] == ("ok" if card is ON else "warn") and row["card"] == card
 
 
 @pytest.mark.parametrize("repo,approval,card", [
@@ -155,16 +170,8 @@ def test_results_card_follows_the_repository_mode(repo, approval, card):
     assert row["status"] == "ok" and row["card"] == card
 
 
-def test_get_started_cards_follow_real_checks():
-    """Plain YAML, so this holds on any SDK: each card follows the model login
-    or one of this hub's doctor checks."""
-    import yaml
-
-    data = yaml.safe_load((ROOT / "get-started.yaml").read_text())
-    doctor = {p["id"] for p in yaml.safe_load((ROOT / "hub.manifest.yaml").read_text())["doctor"]}
-    cards = data["cards"]
-    assert data["version"] == 1 and 1 <= len(cards) <= 6 and len({c["id"] for c in cards}) == len(cards)
-    for card in cards:
-        assert set(card) <= {"id", "title", "check", "line", "detail"} and ("check" in card) != ("line" in card), card
-        assert len(card["title"]) <= 24 and "hub" not in card["title"].lower(), card
-        assert card.get("check", "model") in doctor | {"model"}, card
+def test_get_started_cards_load_on_this_sdk():
+    """The SDK's own loader checks the file: each card follows the model login
+    or one of this hub's doctor checks. Older SDKs have no cards, and skip."""
+    get_started = pytest.importorskip("hubzoid.hubs.get_started")
+    assert len(get_started.load(ROOT).cards) == 6
