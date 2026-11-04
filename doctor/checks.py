@@ -1,7 +1,10 @@
 """The Software Factory's doctor checks. Each returns one row with what is
 wrong and the exact next step, and never prints a credential. They run in
 their own processes, so one failing check never hides another: a builder
-sees every setup problem at once."""
+sees every setup problem at once.
+
+Some rows also carry a `card`: the short line and detail the chat's Get started
+cards show a manager (get-started.yaml). Older Hubzoid versions ignore it."""
 from __future__ import annotations
 
 import json
@@ -13,17 +16,45 @@ from pathlib import Path
 
 FACTORY = "factory"
 STATIONS = ("classifier", "researcher", "analyst", "implementer", "reviewer")
+BUILDS = "Plans and builds run in Docker"
+CHANNEL_NAMES = {"chat": "Chat", "mcp": "MCP", "github": "GitHub", "linear": "Linear", "slack": "Slack"}
 WANT_ROUTES = {"mention": "request", "review_mention": "request", "label": "implement", "pull_request": "summarize",
                "ci_failure": "revise"}
 
 
-def _row(status: str, summary: str, recovery: str | None = None, details: dict | None = None) -> dict:
+def _row(status: str, summary: str, recovery: str | None = None, details: dict | None = None,
+         card: dict | None = None) -> dict:
     out = {"status": status, "summary": summary}
     if recovery:
         out["recovery"] = recovery
     if details:
         out["details"] = details
+    if card:
+        out["card"] = card
     return out
+
+
+def _cut(text: str, limit: int, *, keep_end: bool = False) -> str:
+    if len(text) <= limit:
+        return text
+    return "…" + text[-(limit - 1):] if keep_end else text[:limit - 1].rstrip() + "…"
+
+
+def _card(line: str, detail: str | None = None, *, path: bool = False) -> dict:
+    """A Get started card: a line of at most 60 characters (a long folder keeps
+    its end) and an optional detail of at most 80."""
+    card = {"line": _cut(line, 60, keep_end=path)}
+    if detail:
+        card["detail"] = _cut(detail, 80)
+    return card
+
+
+def _is_local(value) -> bool:
+    return str(value or "").startswith(("/", "~/"))
+
+
+def _and(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
 
 
 def _hub(context) -> Path:
@@ -41,6 +72,7 @@ def settings(context) -> dict:
     s = context["settings"]
     problems = []
     channels = s.get("FACTORY_CHANNELS") or []
+    results = "Reviewed branches in your folder" if _is_local(s.get("FACTORY_REPO")) else "Reviewed draft pull requests"
     if "linear" in channels and not s.get("FACTORY_LINEAR_CONNECTION"):
         problems.append("linear is in FACTORY_CHANNELS but FACTORY_LINEAR_CONNECTION is empty")
     if "slack" in channels and not s.get("FACTORY_SLACK_CONNECTION"):
@@ -49,13 +81,16 @@ def settings(context) -> dict:
         problems.append("FACTORY_CHANNELS has no way to ask the factory for work")
     if not s.get("FACTORY_INTAKE_ENABLED", True):
         return _row("warn", "Intake is paused: no new work starts. Waiting decisions and recovery still work.",
-                    "Set FACTORY_INTAKE_ENABLED: true in hub.settings.yaml and run hubzoid hub configure . --apply.")
+                    "Set FACTORY_INTAKE_ENABLED: true in hub.settings.yaml and run hubzoid hub configure . --apply.",
+                    card=_card(results, "New work is paused"))
     if problems:
-        return _row("fail", "; ".join(problems) + ".", "Fix hub.settings.yaml, then hubzoid hub configure . --check.")
+        return _row("fail", "; ".join(problems) + ".", "Fix hub.settings.yaml, then hubzoid hub configure . --check.",
+                    card=_card(results, "Settings need a fix"))
+    approval = "on" if s.get("FACTORY_REQUIRE_PLAN_APPROVAL", True) else "off"
     return _row("ok", f"{s.get('FACTORY_REPO')}: label {s.get('FACTORY_LABEL')!r}, branches "
                       f"{s.get('FACTORY_BRANCH_PREFIX')}*, {s.get('FACTORY_REVIEW_CYCLES')} review cycles, "
-                      f"{s.get('FACTORY_CI_ATTEMPTS')} CI attempts, plan approval "
-                      f"{'on' if s.get('FACTORY_REQUIRE_PLAN_APPROVAL', True) else 'off'}.")
+                      f"{s.get('FACTORY_CI_ATTEMPTS')} CI attempts, plan approval {approval}.",
+                card=_card(results, f"Plan approval {approval}. A person merges each one."))
 
 
 def github(context) -> dict:
@@ -63,9 +98,10 @@ def github(context) -> dict:
     routes its triggers to the factory."""
     hub_dir = _hub(context)
     s = context["settings"]
-    if str(s.get("FACTORY_REPO") or "").startswith(("/", "~/")):
+    if _is_local(s.get("FACTORY_REPO")):
         return _local_repository(hub_dir, s["FACTORY_REPO"])
     cid = s.get("FACTORY_GITHUB_CONNECTION") or "github"
+    name = str(s.get("FACTORY_REPO") or "")
     try:
         from hubzoid.channels import config
 
@@ -74,7 +110,8 @@ def github(context) -> dict:
         return _row("fail", f"The GitHub connection {cid!r} is not applied.",
                     f"Connect it: hubzoid channels github connect . {cid} --owner <org> --owner-type organization "
                     f"--name <app-name> --open (a hosted hub), or hubzoid channels github connect . {cid} --mode pat "
-                    f"--repository {s.get('FACTORY_REPO')} (a laptop). See SETUP.md, step 5.")
+                    f"--repository {s.get('FACTORY_REPO')} (a laptop). See SETUP.md, step 5.",
+                    card=_card(name, "GitHub not connected"))
     cfg = conn.settings
     problems, notes = [], []
     if conn.config.workflow != FACTORY:
@@ -105,12 +142,13 @@ def github(context) -> dict:
     if problems:
         return _row("fail", f"GitHub connection {cid}: " + "; ".join(problems) + ".",
                     f"Edit channels/{cid}.yaml and apply it with hubzoid channels apply . --file channels/{cid}.yaml "
-                    "--expected-revision <current>.")
+                    "--expected-revision <current>.", card=_card(name, "GitHub connected, needs a change"))
     if notes:
+        state = ", paused" if not conn.config.enabled else ", token mode" if cfg.mode == "pat" else ""
         return _row("warn", f"GitHub connection {cid}: " + "; ".join(notes) + ".",
-                    f"hubzoid channels doctor . {cid}")
+                    f"hubzoid channels doctor . {cid}", card=_card(name, f"GitHub connected{state}"))
     return _row("ok", f"GitHub connection {cid} covers {want} and routes label, mention, CI and new pull requests to "
-                      "the factory.")
+                      "the factory.", card=_card(name, "GitHub connected"))
 
 
 def stations(context) -> dict:
@@ -156,27 +194,33 @@ def sandbox(context) -> dict:
         sandbox_config.check_profile(hub_dir, sandbox_config.load_profile(hub_dir, profile))
     except Exception as exc:  # noqa: BLE001
         return _row("fail", f"Sandbox profile {profile!r}: {getattr(exc, 'message', exc)}",
-                    f"Fix sandboxes/{profile}.yaml, then hubzoid sandbox profiles validate .")
+                    f"Fix sandboxes/{profile}.yaml, then hubzoid sandbox profiles validate .",
+                    card=_card("Build setup needs a fix", BUILDS))
     try:
         from hubzoid.sandbox import service as sandbox_service
 
         report = sandbox_service.doctor(hub_dir)
     except Exception as exc:  # noqa: BLE001
         return _row("fail", f"The sandbox doctor could not run: {getattr(exc, 'message', exc)}",
-                    "hubzoid sandbox doctor .")
+                    "hubzoid sandbox doctor .", card=_card("Could not check Docker", BUILDS))
     checks = report.get("checks") or []
+    docker = [c for c in checks if str(c.get("id", "")).startswith("provider:")]
+    up = bool(docker) and all(c.get("status") == "pass" for c in docker)
+    line = "Docker running" if up else "Docker not running" if docker else "Sandboxes are off"
     failed = [c for c in checks if c.get("status") == "fail"]
     if failed:
         said = " ".join(dict.fromkeys(c["summary"] for c in failed))         # one engine error can fail two checks
         return _row("fail", said + " The analyst, implementer and reviewer cannot run.",
-                    failed[0].get("recovery_action") or "hubzoid sandbox doctor .")
+                    failed[0].get("recovery_action") or "hubzoid sandbox doctor .",
+                    card=_card(line, "The build setup needs a fix" if up else BUILDS))
     warned = [c for c in checks if c.get("status") == "warn"]
     if warned:
         return _row("warn", " ".join(dict.fromkeys(c["summary"] for c in warned)),
-                    warned[0].get("recovery_action") or f"hubzoid sandbox profiles prepare . {profile}")
-    found = " ".join(c["summary"] for c in checks if str(c.get("id", "")).startswith("provider:"))
+                    warned[0].get("recovery_action") or f"hubzoid sandbox profiles prepare . {profile}",
+                    card=_card(line, "Build image not prepared yet"))
+    found = " ".join(c["summary"] for c in docker)
     return _row("ok", f"Sandbox profile {profile} is valid and prepared. {found} Agent commands run offline after "
-                      "setup.".replace("  ", " "))
+                      "setup.".replace("  ", " "), card=_card(line, BUILDS))
 
 
 def write_modes(context) -> dict:
@@ -205,15 +249,46 @@ def _local_repository(hub_dir: Path, value: str) -> dict:
     except Exception as exc:  # noqa: BLE001 - the row says what to do
         return _row("fail", getattr(exc, "message", None) or str(exc),
                     "Set FACTORY_REPO to the top folder of a Git repository outside the hub, with at least one "
-                    "commit on a branch.")
+                    "commit on a branch.", card=_unusable(value, exc))
     return _row("ok", f"Local repository {repo.local_path}, starting from the branch {repo.default_branch}. "
-                      "GitHub is not needed: each result is a reviewed branch in that folder.")
+                      "GitHub is not needed: each result is a reviewed branch in that folder.",
+                card=_card(local.shown(repo.local_path), _working_tree(local, repo), path=True))
+
+
+def _unusable(value: str, exc: Exception) -> dict | None:
+    """The card for a folder the factory can't use: the folder, and why in one sentence."""
+    try:
+        from software_factory import local
+    except Exception:  # noqa: BLE001
+        return None
+    where = str(local.folder(value))
+    reason = (getattr(exc, "message", None) or str(exc)).split(". ")[0].rstrip(".") + "."
+    if reason.startswith(where):
+        reason = "The folder" + reason[len(where):]
+    return _card(local.shown(where), local.shown(reason), path=True)
+
+
+def _working_tree(local, repo) -> str:
+    """The branch and how many files are uncommitted, from one `git status`
+    (through the factory's own Git call: no hooks, no filesystem monitor) that
+    takes no lock, so it never gets in the way of the person's own Git."""
+    out = local._text(Path(repo.local_path), "--no-optional-locks", "status", "--porcelain")
+    if out is None:
+        return f"Branch {repo.default_branch}"
+    count = len([line for line in out.splitlines() if line.strip()])
+    if not count:
+        return f"Branch {repo.default_branch}, clean"
+    return f"Branch {repo.default_branch}, {count} uncommitted file{'s' if count != 1 else ''}"
 
 
 def channels(context) -> dict:
     hub_dir = _hub(context)
     s = context["settings"]
     rows = []
+    listed = list(s.get("FACTORY_CHANNELS") or [])
+    in_folder = _is_local(s.get("FACTORY_REPO"))
+    used = [CHANNEL_NAMES.get(c, c) for c in listed if not (in_folder and c == "github")]
+    asked = _and(used) if used else "No channels"
     try:
         from hubzoid.channels import config
     except Exception:  # noqa: BLE001
@@ -233,18 +308,24 @@ def channels(context) -> dict:
         elif not conn.config.enabled:
             paused.append(f"{name} ({cid})")
     if rows:
-        return _row("fail", "; ".join(rows) + ".", "Apply the channel file (see channels/*.yaml.example).")
+        return _row("fail", "; ".join(rows) + ".", "Apply the channel file (see channels/*.yaml.example).",
+                    card=_card(asked, "; ".join(rows)))
     if paused:
         return _row("warn", f"Paused, so its requests start no work: {', '.join(paused)}. The example files ship "
                             "paused.", "Resume each after doctor passes: hubzoid channels resume . <id> "
-                                       "--expected-revision <rev>.")
+                                       "--expected-revision <rev>.", card=_card(asked, "Paused: " + ", ".join(paused)))
     enabled = ", ".join(s.get("FACTORY_CHANNELS") or [])
-    if str(s.get("FACTORY_REPO") or "").startswith(("/", "~/")) and "github" in (s.get("FACTORY_CHANNELS") or []):
+    if in_folder:
+        card = _card(asked, "GitHub isn't used with a local folder")
+    else:
+        label = s.get("FACTORY_LABEL") or "factory"
+        card = _card(asked, f"GitHub issues labelled {label} start work" if "github" in listed else None)
+    if in_folder and "github" in listed:
         return _row("ok", f"Requests come from {enabled}. The github channel is not used while FACTORY_REPO is a "
                           "folder on this computer: ask in chat or through MCP.",
-                    "To tidy it, set FACTORY_CHANNELS to [chat, mcp].")
+                    "To tidy it, set FACTORY_CHANNELS to [chat, mcp].", card=card)
     return _row("ok", f"Requests come from {enabled}. Other trackers are not built in: a chat request can pull an "
-                      "issue in through that tracker's MCP server when one is connected.")
+                      "issue in through that tracker's MCP server when one is connected.", card=card)
 
 
 def runtime(context) -> dict:
@@ -254,15 +335,23 @@ def runtime(context) -> dict:
     env_file = _hub(context) / ".env"
     if env_file.is_file() and "HUBZOID_SCHEDULES=1" in env_file.read_text(encoding="utf-8", errors="ignore"):
         schedules = "1"
+    on = schedules in ("1", "true", "yes")
     problems = []
     if not found:
         problems.append("neither Claude Code nor Codex is installed")
-    if schedules not in ("1", "true", "yes"):
+    if not on:
         problems.append("HUBZOID_SCHEDULES=1 is not set, so `hubzoid run` will not run factory work")
+    if not found:
+        detail = "Claude Code or Codex not installed"
+    elif not on:
+        detail = "Requests wait until it is turned on"
+    else:
+        detail = _and([{"claude": "Claude Code", "codex": "Codex"}[n] for n in found]) + " installed"
+    card = _card("Work runs in the background" if on else "Background work is off", detail)
     if problems:
         return _row("warn", "; ".join(problems) + ".", "Install and sign in to Claude Code or Codex, and put "
-                    "HUBZOID_SCHEDULES=1 in the hub's .env.")
-    return _row("ok", f"Installed runtime: {', '.join(found)}. Work items run under hubzoid run.")
+                    "HUBZOID_SCHEDULES=1 in the hub's .env.", card=card)
+    return _row("ok", f"Installed runtime: {', '.join(found)}. Work items run under hubzoid run.", card=card)
 
 
 def brain(context) -> dict:

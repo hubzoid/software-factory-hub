@@ -138,7 +138,7 @@ hubzoid stations doctor .
 hubzoid run . --port 8701 --bridge-port 8702
 ```
 
-Fix failed rows before work; PAT/manual-intake warnings explain real limitations. Local sign-in off uses the local account and is suitable only for a trusted laptop. Hosted/team use requires actual sign-in, scoped grants, public URLs and callbacks.
+Fix failed rows before work; PAT/manual-intake warnings explain real limitations. On Hubzoid 2.0.8 or later, the chat's empty screen shows the agent's managers its setup cards (`get-started.yaml`): the model login and the main doctor checks, with each fix behind its (?). Local sign-in off uses the local account and is suitable only for a trusted laptop. Hosted/team use requires actual sign-in, scoped grants, public URLs and callbacks.
 
 In the web chat ask: “Plan a fix for issue #NUMBER. Stop after the plan.” Or use manual GitHub intake with the same request:
 

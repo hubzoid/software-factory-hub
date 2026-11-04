@@ -87,6 +87,8 @@ hubzoid hub doctor .
 hubzoid run . --port 8701 --bridge-port 8702
 ```
 
+On Hubzoid 2.0.8 or later, the chat's empty screen also shows the agent's managers its setup cards (`get-started.yaml`): the model login and the main doctor checks, each with its fix.
+
 In the web chat at **http://127.0.0.1:8701**, ask:
 
 > Plan a fix for issue #1. Stop after the plan.

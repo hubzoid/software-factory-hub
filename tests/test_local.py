@@ -130,16 +130,25 @@ def test_the_setting_accepts_a_folder_path():
     assert problems("example-co/widget") == [] and problems("code") != []
 
 
-def test_doctor_reports_a_local_folder_without_github(folder):
+def test_doctor_reports_a_local_folder_without_github(folder, monkeypatch):
     import importlib.util
 
     spec = importlib.util.spec_from_file_location("factory_checks_local", HUB / "doctor" / "checks.py")
     checks = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(checks)
+    monkeypatch.setenv("HOME", str(folder.parent))
     row = checks.github({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(folder)}})
     assert row["status"] == "ok" and "GitHub is not needed" in row["summary"]
+    assert row["card"] == {"line": "~/mine", "detail": "Branch main, clean"}
+    (folder / "calc.py").write_text("changed\n")
+    (folder / "notes.txt").write_text("new\n")
+    row = checks.github({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(folder)}})
+    assert row["card"] == {"line": "~/mine", "detail": "Branch main, 2 uncommitted files"}
     row = checks.github({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(folder / "missing")}})
     assert row["status"] == "fail" and "does not exist" in row["summary"]
+    assert row["card"] == {"line": "~/mine/missing", "detail": "The folder does not exist."}
+    long = checks._card("~/" + "a" * 70 + "/widget", path=True)["line"]
+    assert len(long) == 60 and long.startswith("…") and long.endswith("/widget")
 
 
 # -- review fixes: other worktrees, folders inside the hub, replay, identity -------------
@@ -375,6 +384,7 @@ def test_doctor_says_the_github_channel_is_not_used_in_local_mode(folder):
     row = checks.channels({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(folder),
                                                             "FACTORY_CHANNELS": ["chat", "mcp", "github"]}})
     assert row["status"] == "ok" and "github channel is not used" in row["summary"]
+    assert row["card"] == {"line": "Chat and MCP", "detail": "GitHub isn't used with a local folder"}
     row = checks.channels({"hub_dir": str(HUB), "settings": {"FACTORY_REPO": str(folder),
                                                             "FACTORY_CHANNELS": ["chat", "mcp"]}})
     assert "not used" not in row["summary"]
