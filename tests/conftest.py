@@ -42,7 +42,7 @@ GIT_ENV = {"GIT_AUTHOR_NAME": "Agent", "GIT_AUTHOR_EMAIL": "agent@sandbox.invali
            "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1",
            "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"}
 COPY = ("AGENTS.md", "agents", "skills", "knowledge", "workflows", "tools_local", "settings.yaml",
-        "work-items.yaml", "hitl.yaml", "sandbox.yaml", "sandboxes", "hub.manifest.yaml", "doctor")
+        "work-items.yaml", "hitl.yaml", "sandbox.yaml", "sandboxes", "hub.manifest.yaml", "doctor", "budgets.yaml")
 
 
 def git(cwd, *args) -> str:
