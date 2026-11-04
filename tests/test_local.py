@@ -144,6 +144,24 @@ def test_doctor_reports_a_local_folder_without_github(folder):
 
 # -- review fixes: other worktrees, folders inside the hub, replay, identity -------------
 
+def test_a_revision_never_brings_back_a_deleted_branch(folder, tmp_path):
+    patch, base = patch_for(folder, tmp_path)
+    head = local.import_branch(str(folder), branch="factory/fix", patch=patch, base_sha=base, expected_head=None)
+    work = tmp_path / "box-revision"                # the revision, built on the factory's branch
+    subprocess.run(["git", "clone", "--quiet", "--branch", "factory/fix", str(folder), str(work)], env=h.GIT_ENV,
+                   check=True)
+    (work / "calc.py").write_text("def total(xs):\n    return sum(list(xs))\n")
+    h.git(work, "commit", "--quiet", "-am", "Revise total")
+    later = subprocess.run(["git", "format-patch", "--stdout", "--binary", "HEAD~1..HEAD"], cwd=work,
+                           env=h.GIT_ENV, capture_output=True, check=True).stdout
+    h.git(folder, "merge", "--quiet", "--ff-only", "factory/fix")   # the person merged it, then deleted it
+    h.git(folder, "branch", "--quiet", "-d", "factory/fix")
+    with pytest.raises(FactoryStop) as stop:
+        local.import_branch(str(folder), branch="factory/fix", patch=later, base_sha=head, expected_head=head)
+    assert stop.value.code == "stale_head" and "no longer" in stop.value.message
+    assert local.branch_head(str(folder), "factory/fix") is None
+
+
 def test_a_branch_checked_out_in_another_worktree_is_never_written(folder, tmp_path):
     patch, base = patch_for(folder, tmp_path)
     local.import_branch(str(folder), branch="factory/fix", patch=patch, base_sha=base, expected_head=None)
@@ -182,8 +200,35 @@ def test_a_folder_inside_the_hub_is_refused(tmp_path):
     with pytest.raises(FactoryRefused, match="inside the hub"):
         local.repo(str(inner), hub_dir=hub)
     # And a repository that contains the hub.
-    with pytest.raises(FactoryRefused, match="inside the hub"):
+    with pytest.raises(FactoryRefused, match="holds the hub"):
         local.repo(str(inner), hub_dir=inner / "nested-hub")
+
+
+def test_another_worktree_of_the_hubs_repository_is_refused(folder, tmp_path):
+    hub_wt = tmp_path / "hub-wt"
+    h.git(folder, "worktree", "add", "--quiet", "-b", "hub", str(hub_wt))
+    with pytest.raises(FactoryRefused, match="worktree of the hub"):
+        local.repo(str(folder), hub_dir=hub_wt)        # the hub is a linked worktree
+    with pytest.raises(FactoryRefused, match="worktree of the hub"):
+        local.repo(str(hub_wt), hub_dir=folder)        # FACTORY_REPO is a linked worktree of the hub's repository
+
+
+def _other_case(path: Path) -> Path:
+    """The same folder with its name typed in another letter case, or skip on a
+    case-sensitive filesystem (Linux), where that is a different folder."""
+    typed = path.parent / path.name.swapcase()
+    if not typed.exists():
+        pytest.skip("case-sensitive filesystem")
+    return typed
+
+
+def test_a_folder_typed_in_another_letter_case_is_the_same_folder(folder):
+    # macOS: FACTORY_REPO typed ~/code/Widget for ~/code/widget is that folder.
+    repo = local.repo(str(_other_case(folder)))
+    assert Path(repo.local_path).samefile(folder) and repo.default_branch == "main"
+    # The hub given in another letter case is still the hub.
+    with pytest.raises(FactoryRefused, match="inside the hub"):
+        local.repo(str(HUB), hub_dir=_other_case(HUB))
 
 
 def test_a_subfolder_of_a_repository_is_refused(folder):

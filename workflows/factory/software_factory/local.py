@@ -36,6 +36,21 @@ def folder(value: str) -> Path:
     return Path(os.path.expanduser(str(value).strip())).resolve()
 
 
+def _same(a: Path, b: Path) -> bool:
+    """The same folder on disk. On a Mac, ~/code/Widget and ~/code/widget are
+    one folder, though the paths differ in letter case."""
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return a == b
+
+
+def _common_dir(path: Path) -> Path | None:
+    """The Git folder shared by every worktree of the repository at `path`."""
+    out = _text(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(out) if out else None
+
+
 def _env() -> dict:
     env = {k: v for k, v in os.environ.items() if k in ("PATH", "HOME", "USER", "LANG", "TMPDIR",
                                                          "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")}
@@ -91,12 +106,20 @@ def repo(value: str, *, hub_dir: str | Path | None = None):
     top = Path(_text(path, "rev-parse", "--show-toplevel") or path).resolve()
     if hub_dir is not None:
         hub = Path(hub_dir).resolve()
-        if top == hub or hub in top.parents or top in hub.parents:
+        if _same(top, hub) or any(_same(p, hub) for p in top.parents):
             raise FactoryRefused("repository_unavailable", f"{path} is inside the hub's own folder or Git "
                                  "repository, so the factory would change the hub itself. Copy it somewhere "
                                  "else (for example cp -R fixtures/sample-repo ~/code/factory-sample), run "
                                  "`git init` and commit there, and set FACTORY_REPO to the copy.")
-    if top != path:
+        if any(_same(p, top) for p in hub.parents):
+            raise FactoryRefused("repository_unavailable", f"{top} holds the hub's own folder, so the factory would "
+                                 "change the hub itself. Set FACTORY_REPO to a repository outside it.")
+        shared = _common_dir(hub)
+        if shared is not None and _same(shared, _common_dir(top) or top):
+            raise FactoryRefused("repository_unavailable", f"{top} is another worktree of the hub's own Git "
+                                 "repository, so the factory's branches would land in the hub's repository. Set "
+                                 "FACTORY_REPO to a separate repository.")
+    if not _same(top, path):
         raise FactoryRefused("repository_unavailable", f"{path} is a folder inside the Git repository {top}. "
                              f"Set FACTORY_REPO to {top}, or copy the folder out, run `git init` and commit "
                              "there, and set FACTORY_REPO to the copy.")
@@ -186,6 +209,9 @@ def import_branch(local_path: str, *, branch: str, patch: bytes, base_sha: str, 
 def _import(local: Path, *, branch: str, patch: bytes, base_sha: str, expected_head: str | None) -> str:
     ref = f"refs/heads/{branch}"
     current = branch_head(str(local), branch)
+    if expected_head is not None and current is None:
+        raise FactoryStop("stale_head", f"{branch} is no longer in {local}: it was deleted after the factory wrote "
+                          "it. Nothing was written. Ask for a new change instead.")
     # The branch is not where this write expects it: either an earlier attempt
     # already wrote this change, or someone else's work is there.
     replay = current is not None and current != expected_head
