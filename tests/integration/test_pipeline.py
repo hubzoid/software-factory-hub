@@ -467,3 +467,54 @@ def test_a_new_request_after_a_pull_request_gets_a_fresh_plan(factory):
     plans_shown = len([s for s in factory.people.seen if s[0] == "plan"])
     factory.run(factory.chat("Fix total again", issue=12, key="done-2"))
     assert len([s for s in factory.people.seen if s[0] == "plan"]) == plans_shown + 1
+
+
+# -- links posted on GitHub ----------------------------------------------------------------
+
+LOCAL_LINKS = ["http://127.0.0.1:8701/portal/artifacts/a-1", "http://localhost:8701/a/1", "http://[::1]:8701/a/1",
+               "/portal/artifacts/a-1", "http://0.0.0.0:8701/a/1", "http://[::]:8701/a/1",
+               "http://127.0.0.2:8701/a/1", "http://app.localhost:8701/a/1", "http://localhost.:8701/a/1",
+               "http://192.168.1.20:8701/a/1", "http://10.0.0.5/a/1", "http://169.254.1.1/a/1",
+               "http://[::ffff:127.0.0.1]:8701/a/1", "http://mac.local:8701/a/1"]
+
+
+@pytest.mark.parametrize("url", LOCAL_LINKS)
+def test_local_plan_and_evidence_links_stay_off_github(factory, monkeypatch, url):
+    from hubzoid.workflows import context
+
+    monkeypatch.setattr(context.Hub, "publish_artifact", lambda self, path, **kw: {"id": "art-1", "url": url})
+    out = factory.run(factory.label())
+    rec = out["factory_v1"]
+    assert outcome(out) == ("review_ready", None)
+    # The record keeps the real link: the owner's chat and Console can open it.
+    assert rec["plan_url"] == url and rec["evidence_url"] == url
+    posted = [factory.api.pulls[rec["pr_number"]]["body"]] + [c["body"] for c in factory.api.comments.get(12, [])]
+    host = url.split("//")[1].split("/")[0] if "//" in url else url
+    assert not any(url in body or host in body for body in posted)
+
+
+@pytest.mark.parametrize("url", ["https://factory.example.test/a/1", "https://8.8.8.8/a/1"])
+def test_public_plan_and_evidence_links_reach_github(factory, monkeypatch, url):
+    from hubzoid.workflows import context
+
+    monkeypatch.setattr(context.Hub, "publish_artifact", lambda self, path, **kw: {"id": "art-1", "url": url})
+    out = factory.run(factory.label())
+    rec = out["factory_v1"]
+    assert rec["evidence_url"] == url
+    assert url in factory.api.pulls[rec["pr_number"]]["body"]
+    assert any(url in c["body"] for c in factory.api.comments.get(12, []))
+
+
+def test_a_local_plan_link_stays_in_the_owners_chat(factory, monkeypatch):
+    # The laptop default: no public URL. Chat has no thread, so the link reaches
+    # only the person who asked.
+    from hubzoid.workflows import context
+
+    monkeypatch.delenv("HUBZOID_PUBLIC_URL")
+    url = "http://127.0.0.1:8701/portal/artifacts/a-1"
+    monkeypatch.setattr(context.Hub, "publish_artifact", lambda self, path, **kw: {"id": "art-1", "url": url})
+    factory.model.route = dict(factory.model.route, route="plan")
+    out = factory.run(factory.chat("Plan the fix for total, stop after the plan", issue=12))
+    assert outcome(out) == ("planned", None)
+    assert f"Full plan: {url}" in out["reply"] and out["factory_v1"]["plan_url"] == url
+    assert not any("127.0.0.1" in c["body"] for c in factory.api.comments.get(12, []))

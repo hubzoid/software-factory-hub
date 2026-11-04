@@ -2,7 +2,7 @@
 tags: [fast, routing]
 fake_tools:
   - tool: factory_repository
-    output: {repository: example-co/widget, repository_id: 2001, connection: github, label: factory, branch_prefix: factory/}
+    output: {repository: example-org/factory-sample, repository_id: 2001, connection: github, label: factory, branch_prefix: factory/}
   - tool: ask_question
     output: {answer: "The password reset emails, they arrive twice."}
   - tool: github__searchIssues
@@ -26,7 +26,7 @@ fake_tools:
         head_sha: abc1234
         comments: []
   - tool: github__getRepository
-    output: {data: {full_name: example-co/widget, default_branch: main, description: "Synthetic sample"}}
+    output: {data: {full_name: example-org/factory-sample, default_branch: main, description: "Synthetic sample"}}
 real_tools: [load_skill, read_knowledge, list_knowledge, list_files, search_sources]
 ---
 ## Prompt

@@ -34,8 +34,10 @@ def record(**fields) -> dict:
     return current
 
 
-def stage(name: str, note: str, *, post: bool = True) -> None:
-    """A station finished: record it, and post a short note on the thread."""
+def stage(name: str, note: str, *, post: bool = True, public: str | None = None) -> None:
+    """A station finished: record it, and post a short note on the thread.
+    `public` is the note for the thread when `note` carries a link only this
+    computer can open; the record keeps `note`."""
     entry = hub.shared_state.get(RECORD.format(id=hub.work_item.id)) or {}
     stages = list(entry.get("stages") or [])
     if not any(s.get("stage") == name and s.get("note") == note for s in stages):
@@ -43,8 +45,9 @@ def stage(name: str, note: str, *, post: bool = True) -> None:
     record(stage=name, stages=stages)
     if post and thread_available():
         # Keyed by content, so a replay or a recovery never posts the note twice.
-        digest = hashlib.sha256(note.encode()).hexdigest()[:12]
-        hub.thread.post(note, key=f"progress:{name}:{digest}", kind="progress")
+        text = note if public is None else public
+        digest = hashlib.sha256(text.encode()).hexdigest()[:12]
+        hub.thread.post(text, key=f"progress:{name}:{digest}", kind="progress")
 
 
 def reply(text: str, *, key: str, kind: str = "result") -> bool:

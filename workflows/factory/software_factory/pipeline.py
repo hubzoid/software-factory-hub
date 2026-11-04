@@ -21,10 +21,12 @@ records are written idempotently, so a replay takes the same path.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 from hubzoid import hub
 from pydantic import BaseModel, Field
@@ -489,12 +491,15 @@ def _plan(r: Run) -> dict:
     a = _analyze(r, c, research)
     plan_text, plan_digest = _plan_document(r, c, a, research)
     url = _publish_plan(r, plan_text)
-    text = (f"Plan ready{f' for #{r.request.subject.number}' if r.request.subject.number else ''}: "
-            f"{a.problem_statement}\n\nSteps:\n" + "\n".join(f"{i}. {s}" for i, s in enumerate(a.plan, 1))
-            + "\n\nAcceptance criteria:\n" + "\n".join(f"- {x}" for x in a.acceptance_criteria)
-            + (f"\n\nFull plan: {url}" if url else "")
-            + f"\n\nTo build it, ask the factory to implement the plan from work {hub.work_item.id}.")
-    return _done(r, "planned", text, plan_url=url)
+
+    def text(link: str | None) -> str:
+        return (f"Plan ready{f' for #{r.request.subject.number}' if r.request.subject.number else ''}: "
+                f"{a.problem_statement}\n\nSteps:\n" + "\n".join(f"{i}. {s}" for i, s in enumerate(a.plan, 1))
+                + "\n\nAcceptance criteria:\n" + "\n".join(f"- {x}" for x in a.acceptance_criteria)
+                + (f"\n\nFull plan: {link}" if link else "")
+                + f"\n\nTo build it, ask the factory to implement the plan from work {hub.work_item.id}.")
+
+    return _done(r, "planned", text(url), public=text(_shareable(url)), plan_url=url)
 
 
 def _plan_document(r: Run, c: Classification, a: Analysis, research: Research | None) -> tuple[str, str]:
@@ -512,6 +517,23 @@ def _output_dir() -> Path:
     from hubzoid import datadir
 
     return Path(datadir.resolve(_hub_dir(), Path("output") / "factory" / hub.work_item.id))
+
+
+def _shareable(url: str | None) -> str | None:
+    """The link if other people can open it, else None. On a laptop the plan and
+    evidence are served from 127.0.0.1; set HUBZOID_PUBLIC_URL to share them.
+    The factory's record and the person's own chat keep the real link: only
+    what is posted where others read it (a channel thread, a pull request)
+    goes through here."""
+    host = (urlparse(url).hostname or "").rstrip(".").lower() if url else ""
+    if not host or host in ("localhost", "local") or host.endswith((".localhost", ".local")):
+        return None
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return url
+    ip = getattr(ip, "ipv4_mapped", None) or ip
+    return None if ip.is_loopback or ip.is_unspecified or ip.is_private or ip.is_link_local else url
 
 
 def _publish_plan(r: Run, text: str, *, post: bool = True) -> str | None:
@@ -534,9 +556,11 @@ def _publish_plan(r: Run, text: str, *, post: bool = True) -> str | None:
 
     url = hub.work_item.checkpoint(routes.ANALYZE, share)
     r.record["plan_url"] = url
-    progress.stage(routes.ANALYZE, f"Plan ready: {len(r.record['analysis']['plan'])} steps, "
-                                   f"{len(r.record['analysis']['acceptance_criteria'])} acceptance criteria."
-                   + (f" {url}" if url else ""), post=post and r.route == "implement")
+    note = (f"Plan ready: {len(r.record['analysis']['plan'])} steps, "
+            f"{len(r.record['analysis']['acceptance_criteria'])} acceptance criteria.")
+    public = _shareable(url)
+    progress.stage(routes.ANALYZE, note + (f" {url}" if url else ""), post=post and r.route == "implement",
+                   public=note + (f" {public}" if public else ""))
     return url
 
 
@@ -555,9 +579,11 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
         url = _publish_plan(r, text, post=False)
         r.record["plan_approved"] = dict(earlier, reused_from=prior.get("work_item"))
         progress.record(plan_approved=r.record["plan_approved"])
-        progress.stage(routes.PLAN_REVIEW, f"Building the plan {earlier.get('by')} approved earlier "
-                                           f"(work {str(prior.get('work_item'))[:8]})."
-                       + (f" {url}" if url else ""))
+        note = (f"Building the plan {earlier.get('by')} approved earlier "
+                f"(work {str(prior.get('work_item'))[:8]}).")
+        public = _shareable(url)
+        progress.stage(routes.PLAN_REVIEW, note + (f" {url}" if url else ""),
+                       public=note + (f" {public}" if public else ""))
         return a
     url = _publish_plan(r, text, post=not needed)
     if not needed:
@@ -565,9 +591,10 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
     for version in range(1, PLAN_REVISIONS + 2):
         path = _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.md"
         analysis = r.record["analysis"]
+        public = _shareable(url)
         progress.reply(f"Plan v{version} is ready: {len(analysis['plan'])} steps, "
                        f"{len(analysis['acceptance_criteria'])} acceptance criteria. Approve it in your Inbox in "
-                       f"Hubzoid" + (f": {url}" if url else "") + ".",
+                       f"Hubzoid" + (f": {public}" if public else "") + ".",
                        key=f"plan-wait:{version}", kind="question")
         progress.record(stage=routes.PLAN_REVIEW, waiting="plan_approval", plan_url=url)
         decision = hub.review_plan(path, title=_plan_title(r, version),
@@ -759,9 +786,10 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
             return None
 
     ev_url = hub.work_item.checkpoint(routes.DELIVER, share_evidence)
+    ev_public = _shareable(ev_url)
     cautions = (r.record.get("scan") or {}).get("cautions") or []
     body = evidence.pr_body(analysis=a, implementation=impl, review=review, subject_kind=r.request.subject.kind,
-                            subject_number=r.request.subject.number, evidence_url=ev_url, cautions=cautions,
+                            subject_number=r.request.subject.number, evidence_url=ev_public, cautions=cautions,
                             pushed_sha=pushed_sha, plan_digest=r.record.get("plan_digest"))
     opened = pr_number is None
     if opened:
@@ -812,8 +840,8 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
                else "The change you asked for")
         text = (f"{why} is pushed to pull request #{pr_number}" + (f": {pr_url}" if pr_url else ".") + "\n\n"
                 f"The branch {branch} is now at `{pushed_sha[:12]}`. {passing} Check before it merges: {look}.")
-    text += (f"\n\nEvidence: {ev_url}" if ev_url else "") + note
-    return _done(r, "review_ready", text)
+    return _done(r, "review_ready", text + (f"\n\nEvidence: {ev_url}" if ev_url else "") + note,
+                 public=text + (f"\n\nEvidence: {ev_public}" if ev_public else "") + note)
 
 
 def _brain_note(r: Run, a: Analysis, impl: Implementation, review: Review) -> str:
@@ -926,11 +954,14 @@ def _act(r: Run) -> dict:
 
 # -- outcomes -------------------------------------------------------------------------------
 
-def _done(r: Run, outcome: str, text: str, **extra) -> dict:
+def _done(r: Run, outcome: str, text: str, *, public: str | None = None, **extra) -> dict:
+    """`public` is the wrap-up for the work's thread when `text` carries a link
+    only this computer can open. The record and the chat reply keep `text`."""
     r.record.update(outcome=outcome, terminal_stage=routes.TERMINAL_STAGE.get(r.route), reply=text[:20000],
                     finished=time.time(), **extra)
     progress.record(outcome=outcome, reply=text[:20000], **extra)
-    posted = progress.reply(text, key=_wrapup_key(text))
+    post = text if public is None else public
+    posted = progress.reply(post, key=_wrapup_key(post))
     return {"posted": posted, "reply": text, "factory_v1": r.record}
 
 
