@@ -201,10 +201,11 @@ def _local_repository(hub_dir: Path, value: str) -> dict:
     try:
         from software_factory import local
 
-        repo = local.repo(value)
+        repo = local.repo(value, hub_dir=hub_dir)
     except Exception as exc:  # noqa: BLE001 - the row says what to do
         return _row("fail", getattr(exc, "message", None) or str(exc),
-                    "Set FACTORY_REPO to the path of a Git folder with at least one commit.")
+                    "Set FACTORY_REPO to the top folder of a Git repository outside the hub, with at least one "
+                    "commit on a branch.")
     return _row("ok", f"Local repository {repo.local_path}, starting from the branch {repo.default_branch}. "
                       "GitHub is not needed: each result is a reviewed branch in that folder.")
 
@@ -238,6 +239,10 @@ def channels(context) -> dict:
                             "paused.", "Resume each after doctor passes: hubzoid channels resume . <id> "
                                        "--expected-revision <rev>.")
     enabled = ", ".join(s.get("FACTORY_CHANNELS") or [])
+    if str(s.get("FACTORY_REPO") or "").startswith(("/", "~/")) and "github" in (s.get("FACTORY_CHANNELS") or []):
+        return _row("ok", f"Requests come from {enabled}. The github channel is not used while FACTORY_REPO is a "
+                          "folder on this computer: ask in chat or through MCP.",
+                    "To tidy it, set FACTORY_CHANNELS to [chat, mcp].")
     return _row("ok", f"Requests come from {enabled}. Other trackers are not built in: a chat request can pull an "
                       "issue in through that tracker's MCP server when one is connected.")
 

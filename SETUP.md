@@ -25,13 +25,25 @@ cp .env.example .env
 
 Start with a scratch copy you own. Creating a GitHub repository, seeding issues or resetting a demo needs the person's explicit scope; this recipe does not grant it. The labelled sample is in `fixtures/sample-repo/`. For an existing repository, keep a local checkout available for context bootstrap.
 
+`FACTORY_REPO` takes one of two forms:
+
+- `OWNER/REPO`: a GitHub repository. Steps 3 (connect GitHub) applies.
+- A folder path starting with `/` or `~/`: local repository mode. No GitHub, no `gh`, and step 3 is skipped. The folder must be the top folder of its own Git repository, outside this hub, with at least one commit on a branch. The factory starts from its current branch and leaves each result as a reviewed branch there, without touching your working tree. It plans and builds; issues and pull requests don't exist in this mode. Set `FACTORY_CHANNELS: [chat, mcp]`.
+
+For the sample in local mode, copy it out of the hub first (pointing at `fixtures/sample-repo` in place is refused, because it is inside the hub's own repository):
+
+```sh
+cp -R fixtures/sample-repo ~/code/factory-sample
+(cd ~/code/factory-sample && git init -q -b main && git add -A && git commit -qm "Sample")
+```
+
 Edit `hub.settings.yaml`, preserving unrelated values:
 
 ```yaml
 version: 1
 values:
-  FACTORY_REPO: OWNER/REPO
-  FACTORY_CHANNELS: [chat, mcp, github]
+  FACTORY_REPO: OWNER/REPO            # or a folder: ~/code/factory-sample
+  FACTORY_CHANNELS: [chat, mcp, github]   # local mode: [chat, mcp]
   FACTORY_REQUIRE_PLAN_APPROVAL: true
 secrets: {}
 ```

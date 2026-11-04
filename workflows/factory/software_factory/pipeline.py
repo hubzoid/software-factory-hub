@@ -287,7 +287,7 @@ def _plan_title(r: Run, version: int) -> str:
     if subject.get("number"):
         title = " ".join(str(subject.get("title") or "").split())[:70]
         return f"Plan v{version} for #{subject['number']}" + (f": {title}" if title else "")
-    return f"Factory plan v{version}: {r.repo.full_name}"
+    return f"Factory plan v{version}: {local.shown(r.repo.local_path) if r.repo.local_path else r.repo.full_name}"
 
 
 def _prior_plan(item_id: str, requester: str, full_name: str, subject: dict | None = None) -> dict | None:

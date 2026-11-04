@@ -87,7 +87,7 @@ def repo() -> Repo:
     from . import local
 
     if local.is_local(hub.setting("FACTORY_REPO")):
-        return local.repo(hub.setting("FACTORY_REPO"))
+        return local.repo(hub.setting("FACTORY_REPO"), hub_dir=_hub_dir())
     conn = connection()
     wanted = (hub.setting("FACTORY_REPO") or "").lower()
     match = next((r for r in conn.settings.repositories or [] if r.full_name.lower() == wanted), None)
