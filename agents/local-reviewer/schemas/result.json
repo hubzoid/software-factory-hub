@@ -1,0 +1,72 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "verdict": {
+      "description": "The verdict.",
+      "enum": [
+        "approve",
+        "request_changes",
+        "reject"
+      ],
+      "type": "string"
+    },
+    "reviewed_sha": {
+      "description": "The output of git rev-parse HEAD in the checkout you reviewed.",
+      "type": "string"
+    },
+    "criteria_results": {
+      "description": "One entry per acceptance criterion.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "criterion": {
+            "description": "The acceptance criterion, verbatim.",
+            "type": "string"
+          },
+          "pass": {
+            "description": "Whether it passes.",
+            "type": "boolean"
+          },
+          "evidence": {
+            "description": "What in the diff or the verification output shows it passing or failing.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "criterion",
+          "pass",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "blocking_findings": {
+      "description": "Each names where, what is wrong and why it matters.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "suggestions": {
+      "description": "Advisory, non-blocking notes.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "description": "One paragraph on the verdict and what drove it.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "verdict",
+    "reviewed_sha",
+    "criteria_results",
+    "blocking_findings",
+    "suggestions",
+    "summary"
+  ],
+  "type": "object"
+}

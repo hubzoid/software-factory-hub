@@ -70,15 +70,19 @@ def ledger_put(repository_id: int, branch: str, entry: dict) -> None:
 
 
 def _export(call_id: str) -> tuple[bytes, str, str]:
-    """The patch the SDK exported for one station call, its digest and the
-    commit the sandbox's checkout started from."""
+    """The patch the SDK exported for one station call (or the factory, for a
+    build on this computer), its digest and the commit the checkout started from."""
     from hubzoid import datadir
     from hubzoid.sandbox import service as sandbox_service
     from hubzoid.workflows import context
 
+    from . import builds
+
     hub_dir = context._ctx().hub_dir
     item_id = hub.work_item.id
-    boxes = sandbox_service.list_rows(hub_dir, owner_kind="station_call", owner_id=call_id, limit=10)
+    local = builds.record(call_id)
+    boxes = ([{"exports_json": local.get("exports") or []}] if local is not None
+             else sandbox_service.list_rows(hub_dir, owner_kind="station_call", owner_id=call_id, limit=10))
     for box in boxes:
         for exp in box.get("exports_json") or []:
             path = Path(exp["file"])

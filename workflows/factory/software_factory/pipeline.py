@@ -31,7 +31,8 @@ from urllib.parse import urlparse
 from hubzoid import hub
 from pydantic import BaseModel, Field
 
-from . import brain, evidence, github, intake, local, policy, progress, publish, routes, sanitize, scope, stations
+from . import (brain, builds, evidence, github, intake, local, policy, progress, publish, routes, sanitize, scope,
+               stations)
 from .errors import FactoryStop
 from .schemas import Analysis, Classification, Implementation, Research, Review
 
@@ -127,7 +128,8 @@ def _failed(r: Run, exc: Exception) -> None:
 
 SNAPSHOT = {"FACTORY_REQUIRE_PLAN_APPROVAL": True, "FACTORY_REVIEW_CYCLES": 2, "FACTORY_CI_ATTEMPTS": 2,
             "FACTORY_BRANCH_PREFIX": "factory/", "FACTORY_INTAKE_ENABLED": True,
-            "FACTORY_CHANNELS": ["chat", "mcp", "github"], "FACTORY_REPO": ""}
+            "FACTORY_CHANNELS": ["chat", "mcp", "github"], "FACTORY_REPO": "", "FACTORY_BUILDS": "auto",
+            "FACTORY_LOCAL_SETUP": "", "FACTORY_SANDBOX_PROFILE": "factory"}
 
 
 def _settings_now() -> dict:
@@ -462,11 +464,29 @@ def _analyze(r: Run, c: Classification, research: Research | None, *, revision: 
     else:
         a, call = stations.call("analyst", stations.analyst_message(
             r.request, r.ground, c, research, r.ground.get("brain") or "", notes=notes), stage=routes.ANALYZE,
-            revision=revision, checkout={"url": r.repo.clone_url, "ref": r.repo.default_branch})
+            revision=revision, checkout={"url": r.repo.clone_url, "ref": r.repo.default_branch},
+            **_where(r, routes.ANALYZE))
         r.record["base_sha"] = stations.checkout_commit(call) or r.record.get("base_sha")
     r.record["analysis"] = a.model_dump()
     _drain(r)
     return a
+
+
+def _where(r: Run, stage: str) -> dict:
+    """Where this work item's analyst, implementer and reviewer run: Docker or
+    locally, decided once (FACTORY_BUILDS) and saved, so a recovered run never
+    switches. Work that started before the setting existed stays on Docker,
+    without a new saved step, so its replay takes the steps it took before."""
+    if "builds" not in r.record:
+        if "FACTORY_BUILDS" not in r.settings:
+            chosen = {"mode": "docker", "reason": "This work started before builds could run locally."}
+        else:
+            setting = r.settings["FACTORY_BUILDS"]
+            chosen = hub.work_item.checkpoint(stage, lambda: builds.choose(_hub_dir(), setting))
+        r.record["builds"] = chosen["mode"]
+        progress.record(builds=chosen["mode"], builds_reason=chosen["reason"])
+    return {"builds": r.record["builds"], "setup": r.settings.get("FACTORY_LOCAL_SETUP") or None,
+            "profile": r.settings.get("FACTORY_SANDBOX_PROFILE") or "factory"}
 
 
 # -- routes ---------------------------------------------------------------------------------
@@ -694,7 +714,7 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
             r.request, r.ground, c, a, brain_text, branch=branch, revision=revision, fresh=head is None,
             findings=findings,
             previous=previous, ci_context=ci_context), stage=routes.IMPLEMENT, revision=revision,
-            checkout=checkout)
+            checkout=checkout, **_where(r, routes.IMPLEMENT))
         r.record["implementation"] = impl.model_dump()
         if not impl.committed:
             raise FactoryStop("implementation_not_pushed", "The implementer did not finish: "
@@ -723,7 +743,8 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
         review, rcall = stations.call("reviewer", stations.reviewer_message(
             r.request, r.ground, a, impl, brain_text, branch=branch,
             base_sha=r.record.get("base_sha") or published["base_sha"], pushed_sha=head),
-            stage=routes.REVIEW, revision=revision, checkout={"url": r.repo.clone_url, "ref": branch})
+            stage=routes.REVIEW, revision=revision, checkout={"url": r.repo.clone_url, "ref": branch},
+            **_where(r, routes.REVIEW))
         reviewed_from = stations.checkout_commit(rcall)
         left = stations.export_state(rcall)
         reviews.append({"revision": revision, "verdict": review.verdict, "reviewed_sha": review.reviewed_sha,

@@ -16,7 +16,11 @@ from pathlib import Path
 
 FACTORY = "factory"
 STATIONS = ("classifier", "researcher", "analyst", "implementer", "reviewer")
+#: The stations' versions for builds on this computer (FACTORY_BUILDS).
+LOCAL = {"analyst": "local-analyst", "implementer": "local-implementer", "reviewer": "local-reviewer"}
 BUILDS = "Plans and builds run in Docker"
+LOCAL_LINE = "Builds run locally"
+LOCAL_BUILDS = "Confined, offline, no credentials"
 CHANNEL_NAMES = {"chat": "Chat", "mcp": "MCP", "github": "GitHub", "linear": "Linear", "slack": "Slack"}
 WANT_ROUTES = {"mention": "request", "review_mention": "request", "label": "implement", "pull_request": "summarize",
                "ci_failure": "revise"}
@@ -182,25 +186,54 @@ def stations(context) -> dict:
     except Exception as exc:  # noqa: BLE001
         return _row("fail", f"Stations do not load: {getattr(exc, 'message', exc)}",
                     "Fix the file named above, then `hubzoid stations validate .`")
-    missing = [n for n in STATIONS if n not in loaded]
+    missing = [n for n in (*STATIONS, *LOCAL.values()) if n not in loaded]
     if missing:
         return _row("fail", f"Missing stations: {', '.join(missing)}.", "Restore agents/<name>/AGENTS.md.")
-    drift = [n for n in STATIONS if loaded[n].schema != json_schema(MODELS[n])]
+    models = {**{n: MODELS[n] for n in STATIONS}, **{v: MODELS[k] for k, v in LOCAL.items()}}
+    drift = [n for n, m in models.items() if loaded[n].schema != json_schema(m)]
     if drift:
         return _row("fail", f"Result schemas differ from the factory's models: {', '.join(drift)}.",
                     "Regenerate them: `cd workflows/factory && python -m software_factory.schemas --write`")
-    boxed = [n for n in ("analyst", "implementer", "reviewer") if loaded[n].sandbox != context["settings"].get(
-        "FACTORY_SANDBOX_PROFILE")]
+    boxed = [n for n in LOCAL if loaded[n].sandbox != context["settings"].get("FACTORY_SANDBOX_PROFILE")]
     if boxed:
         return _row("fail", f"{', '.join(boxed)} must use the sandbox profile "
                             f"{context['settings'].get('FACTORY_SANDBOX_PROFILE')}.",
                     "Set sandbox: in agents/<name>/AGENTS.md to FACTORY_SANDBOX_PROFILE.")
+    unboxed = [v for v in LOCAL.values() if loaded[v].sandbox]
+    if unboxed:
+        return _row("fail", f"{', '.join(unboxed)} are for local builds and must not name a sandbox.",
+                    "Remove sandbox: from agents/<name>/AGENTS.md.")
     engines = sorted({loaded[n].engine for n in STATIONS})
     return _row("ok", f"Five stations load on {', '.join(engines)}: " + ", ".join(
-        f"{n} ({len(loaded[n].tools)} tools)" for n in STATIONS) + ".")
+        f"{n} ({len(loaded[n].tools)} tools)" for n in STATIONS) + ". Local builds use "
+        + _and(list(LOCAL.values())) + ".")
 
 
 def sandbox(context) -> dict:
+    """Where builds run (FACTORY_BUILDS), and that it works there: Docker's
+    sandbox doctor, or local confinement (macOS for now)."""
+    setting = str(context["settings"].get("FACTORY_BUILDS") or "auto").lower()
+    if setting == "docker":
+        return _docker(context)
+    _workflow_code(_hub(context))
+    from software_factory import hostbox
+
+    problem = hostbox.unsupported()
+    setup = "" if context["settings"].get("FACTORY_LOCAL_SETUP") else " No setup command (FACTORY_LOCAL_SETUP)."
+    said = ("Builds run locally: commands are confined to a work folder, offline and without credentials. Setup "
+            "reaches only the package registries." + setup)
+    if setting == "local":
+        if problem:
+            return _row("fail", problem, "Set FACTORY_BUILDS: docker and start Docker.",
+                        card=_card("Builds need Docker here", "Local builds need macOS for now"))
+        return _row("ok", said, card=_card(LOCAL_LINE, LOCAL_BUILDS))
+    row = _docker(context)
+    if row.get("details", {}).get("docker_up") or problem:
+        return row
+    return _row("ok", "Docker isn't running. " + said, card=_card(LOCAL_LINE, "You can also use Docker"))
+
+
+def _docker(context) -> dict:
     """The sandbox profile is valid and the SDK's sandbox doctor passes
     (config, provider, runtime, prepared image). Hubzoid never falls back to
     the host shell."""
@@ -226,19 +259,20 @@ def sandbox(context) -> dict:
     up = bool(docker) and all(c.get("status") == "pass" for c in docker)
     line = "Docker running" if up else "Docker not running" if docker else "Sandboxes are off"
     failed = [c for c in checks if c.get("status") == "fail"]
+    seen = {"docker_up": up}
     if failed:
         said = " ".join(dict.fromkeys(c["summary"] for c in failed))         # one engine error can fail two checks
         return _row("fail", said + " The analyst, implementer and reviewer cannot run.",
-                    failed[0].get("recovery_action") or "`hubzoid sandbox doctor .`",
+                    failed[0].get("recovery_action") or "`hubzoid sandbox doctor .`", details=seen,
                     card=_card(line, "The build setup needs a fix" if up else BUILDS))
     warned = [c for c in checks if c.get("status") == "warn"]
     if warned:
         return _row("warn", " ".join(dict.fromkeys(c["summary"] for c in warned)),
                     warned[0].get("recovery_action") or f"`hubzoid sandbox profiles prepare . {profile}`",
-                    card=_card(line, "Build image not prepared yet"))
+                    details=seen, card=_card(line, "Build image not prepared yet"))
     found = " ".join(c["summary"] for c in docker)
     return _row("ok", f"Sandbox profile {profile} is valid and prepared. {found} Agent commands run offline after "
-                      "setup.".replace("  ", " "), card=_card(line, BUILDS))
+                      "setup.".replace("  ", " "), details=seen, card=_card(line, BUILDS))
 
 
 def write_modes(context) -> dict:

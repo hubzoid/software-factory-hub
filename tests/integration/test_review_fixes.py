@@ -15,7 +15,7 @@ def set_values(factory, **values):
 
     lines = "".join(f"  {k}: {str(v).lower() if isinstance(v, bool) else v}\n" for k, v in values.items())
     (factory.hub_dir / "hub.settings.yaml").write_text(
-        f"version: 1\nvalues:\n  FACTORY_REPO: example-co/widget\n{lines}")
+        f"version: 1\nvalues:\n  FACTORY_BUILDS: docker\n  FACTORY_REPO: example-co/widget\n{lines}")
     settings.forget()
 
 

@@ -18,7 +18,7 @@ description: Set up Software Factory from Claude Code, Cowork or Codex with this
 
 ## 1. Check the machine
 
-Read `SETUP.md` and `docs/settings.md`. Check Python 3.12, Git, Docker and the signed-in runtime (Claude Code or Codex) with the commands in `SETUP.md` step 1. In Cowork, check that you really have file and command access. If not, say so instead of installing a helper or claiming completion.
+Read `SETUP.md` and `docs/settings.md`. Check Python 3.12, Git, the signed-in runtime (Claude Code or Codex) and, if they have it, Docker, with the commands in `SETUP.md` step 1. Docker is optional on macOS, where builds can run locally (`FACTORY_BUILDS`); on Linux and Windows it is needed. In Cowork, check that you really have file and command access. If not, say so instead of installing a helper or claiming completion.
 
 ## 2. Pick one repository
 
@@ -40,7 +40,7 @@ Run `python scripts/factory_setup.py context` to build the repository brief from
 
 ## 6. Run doctor
 
-Run doctor and fix what it reports. A failed Docker or model check blocks that part of the factory. With a personal access token and no verified webhook forwarding, work arrives through manual intake: changing a label on GitHub alone delivers nothing to a laptop. Say so.
+Run doctor and fix what it reports. A failed Builds or model check blocks that part of the factory. Without Docker on macOS, the Builds row passes and says builds run locally. With a personal access token and no verified webhook forwarding, work arrives through manual intake: changing a label on GitHub alone delivers nothing to a laptop. Say so.
 
 ## 7. First plan, first draft
 

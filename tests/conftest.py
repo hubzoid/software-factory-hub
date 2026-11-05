@@ -338,6 +338,15 @@ class FakeModel:
 
 # -- fixtures -------------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _own_temp(tmp_path_factory, monkeypatch):
+    """Builds on this computer keep their work folders in the system's
+    temporary folder: each test gets its own."""
+    import tempfile
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path_factory.mktemp("systemp")))
+
+
 @pytest.fixture
 def remote(tmp_path, monkeypatch):
     r = Remote(tmp_path / "git")
@@ -360,8 +369,10 @@ def factory_hub(tmp_path, monkeypatch, remote):
             shutil.copytree(src, root / name, ignore=shutil.ignore_patterns("__pycache__"))
         elif src.exists():
             shutil.copy2(src, root / name)
+    # Docker's sandbox is faked below (stations_fake); builds on this computer
+    # have their own tests (test_builds.py).
     (root / "hub.settings.yaml").write_text(
-        "version: 1\nvalues:\n  FACTORY_REPO: example-co/widget\n  FACTORY_CHANNELS: [chat, mcp, github]\n"
+        "version: 1\nvalues:\n  FACTORY_BUILDS: docker\n  FACTORY_REPO: example-co/widget\n  FACTORY_CHANNELS: [chat, mcp, github]\n"
         "secrets: {}\n")
     (root / ".env").write_text("MODEL=claude-local\nHUBZOID_SCHEDULES=1\n")
     monkeypatch.setenv("HUBZOID_HUB_DIR", str(root))

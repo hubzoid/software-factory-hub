@@ -1,0 +1,93 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "branch": {
+      "description": "The local branch the commits are on.",
+      "type": "string"
+    },
+    "base": {
+      "description": "The branch the work is based on, normally the default branch.",
+      "type": "string"
+    },
+    "committed": {
+      "description": "True when the change is committed and ready for the factory to publish. If false, the reason is in known_limitations.",
+      "type": "boolean"
+    },
+    "head_commit": {
+      "description": "The output of git rev-parse HEAD after the last commit, or null when nothing was committed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "change_summary": {
+      "description": "One entry per changed file.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "description": "The file path.",
+            "type": "string"
+          },
+          "change": {
+            "description": "What changed in this file and why.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "change"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "verification": {
+      "description": "Every check that ran, exactly as run, with its result.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "description": "The command as run.",
+            "type": "string"
+          },
+          "result": {
+            "description": "Pass or fail, and the relevant output.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "command",
+          "result"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "deviations": {
+      "description": "Departures from the plan, with reasons. Empty when the plan held.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "known_limitations": {
+      "description": "Anything the reviewer should look at closely.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "branch",
+    "base",
+    "committed",
+    "head_commit",
+    "change_summary",
+    "verification",
+    "deviations",
+    "known_limitations"
+  ],
+  "type": "object"
+}

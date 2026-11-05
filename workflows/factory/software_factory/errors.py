@@ -53,6 +53,14 @@ REASONS = {
     "local_mode": "Describe the change you want in your own words and ask for a plan or a change.",
     "local_write_failed": "Nothing in your repository was changed. Read the reason, fix the folder if it names "
                           "a problem there, then ask again.",
+    "builds_unavailable": "Start Docker, or run the factory on a Mac, where builds can run without Docker "
+                          "(FACTORY_BUILDS). Then ask again.",
+    "setup_failed": "The setup command did not finish, so no agent ran. Fix FACTORY_LOCAL_SETUP (local builds) or "
+                    "the setup command in sandboxes/factory.yaml (Docker), then ask again.",
+    "checkout_failed": "The factory could not check the repository out. Check FACTORY_REPO and that this computer "
+                       "can clone it, then ask again.",
+    "export_failed": "The implementer's commits could not be read, so nothing was published. Ask again.",
+    "settings_invalid": "Fix the setting named above in Setup, then ask again.",
     "unexpected_error": "An administrator opens the work item under Settings, My work items, reads the error and "
                         "restarts or cancels it.",
 }

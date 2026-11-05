@@ -100,7 +100,7 @@ def test_plan_rejected_stops_before_any_implementation(factory):
 
 def test_plan_approval_can_be_turned_off(factory):
     (factory.hub_dir / "hub.settings.yaml").write_text(
-        "version: 1\nvalues:\n  FACTORY_REPO: example-co/widget\n  FACTORY_REQUIRE_PLAN_APPROVAL: false\n")
+        "version: 1\nvalues:\n  FACTORY_BUILDS: docker\n  FACTORY_REPO: example-co/widget\n  FACTORY_REQUIRE_PLAN_APPROVAL: false\n")
     from hubzoid.hubs import settings
 
     settings.forget()
@@ -257,7 +257,7 @@ def test_requester_can_stop_with_a_follow_up(factory):
 
 def test_intake_paused(factory):
     (factory.hub_dir / "hub.settings.yaml").write_text(
-        "version: 1\nvalues:\n  FACTORY_REPO: example-co/widget\n  FACTORY_INTAKE_ENABLED: false\n")
+        "version: 1\nvalues:\n  FACTORY_BUILDS: docker\n  FACTORY_REPO: example-co/widget\n  FACTORY_INTAKE_ENABLED: false\n")
     from hubzoid.hubs import settings
 
     settings.forget()
@@ -420,7 +420,7 @@ def test_api_work_claiming_a_red_ci_run_is_refused(factory):
 
 def test_a_channel_missing_from_factory_channels_starts_nothing(factory):
     (factory.hub_dir / "hub.settings.yaml").write_text(
-        "version: 1\nvalues:\n  FACTORY_REPO: example-co/widget\n  FACTORY_CHANNELS: [github]\n")
+        "version: 1\nvalues:\n  FACTORY_BUILDS: docker\n  FACTORY_REPO: example-co/widget\n  FACTORY_CHANNELS: [github]\n")
     from hubzoid.hubs import settings
 
     settings.forget()

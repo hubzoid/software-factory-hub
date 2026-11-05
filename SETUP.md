@@ -4,12 +4,12 @@ Use this recipe from Claude Code, Cowork with supported local file/command acces
 
 ## 1. Check prerequisites and install
 
-Python 3.12, Git, one installed Claude Code or Codex runtime with supported sign-in, and a running Docker engine are needed. Cowork is a setup surface, not the execution runtime. Check its actual file and command capabilities; if missing, use an existing authorized local bridge or report the gap. Do not install an invented helper.
+Python 3.12, Git and one installed Claude Code or Codex runtime with supported sign-in are needed. Docker is optional on macOS: without it, builds run locally in a work folder confined by macOS's sandbox (`FACTORY_BUILDS`, below). On Linux and Windows, a running Docker engine is needed. Cowork is a setup surface, not the execution runtime. Check its actual file and command capabilities; if missing, use an existing authorized local bridge or report the gap. Do not install an invented helper.
 
 ```sh
 python3 --version
 git --version
-docker info
+docker info              # optional on macOS
 # Check the selected runtime only:
 claude --version
 # or: codex --version
@@ -66,7 +66,7 @@ hubzoid sandbox doctor .
 hubzoid sandbox profiles prepare . factory
 ```
 
-A missing Docker engine is a blocking diagnostic, not permission to use the host shell.
+Without Docker, `FACTORY_BUILDS: auto` (the default) builds locally on macOS. Set `FACTORY_LOCAL_SETUP` to the same locked install. It runs in the repository folder and reaches only the registries in `sandboxes/factory.yaml`. Put Python dependencies in `"$FACTORY_ENV"`, a virtual environment outside the repository that comes first on `PATH`, for example `python3 -m venv "$FACTORY_ENV" && "$FACTORY_ENV/bin/python" -m pip install --quiet -r requirements-dev.txt`. Commands are confined to the work folder, offline, without credentials and without access to your home folder. On Linux and Windows, a missing Docker engine is a blocking diagnostic, never permission to use the host shell.
 
 ## 3. Connect GitHub, preserving the Factory routes
 

@@ -165,7 +165,10 @@ def json_schema(model: type[BaseModel]) -> dict:
 
 def write(hub_dir: Path) -> list[Path]:
     written = []
-    for name, model in STATIONS.items():
+    # The analyst, implementer and reviewer also have local- versions, for builds on this computer.
+    names = [(name, model) for name, model in STATIONS.items()]
+    names += [(f"local-{name}", STATIONS[name]) for name in ("analyst", "implementer", "reviewer")]
+    for name, model in names:
         target = hub_dir / "agents" / name / "schemas" / "result.json"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(json_schema(model), indent=2) + "\n", encoding="utf-8")
