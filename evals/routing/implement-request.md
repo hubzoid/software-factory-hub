@@ -2,7 +2,7 @@
 tags: [fast, routing]
 fake_tools:
   - tool: factory_repository
-    output: {repository: example-co/widget, repository_id: 2001, connection: github, label: factory, branch_prefix: factory/}
+    output: {repository: example-org/factory-sample, repository_id: 2001, connection: github, label: factory, branch_prefix: factory/}
   - tool: github__getIssueContext
     output:
       data:
@@ -18,7 +18,8 @@ fake_tools:
   - tool: github__searchCode
     output: {data: [], truncated: false, next_cursor: null}
   - tool: start_factory_work
-    output: {work_item: 9f1c2d3e-0000-4000-8000-000000000004, state: accepted, created: true, link: /settings#/me/work/factory/9f1c2d3e}
+    output: {work_item: 9f1c2d3e-0000-4000-8000-000000000004, state: accepted, created: true, link: /settings#/me/work/factory/9f1c2d3e,
+             note: "Nothing is built until you approve this work's plan in your Inbox. A plan you already approved in earlier work that stopped before a pull request is built without asking again. The factory works in the background. Pull request updates wait for your approval under your Inbox. Ask for its status any time."}
   - tool: factory_status
     output: {state: running, route: plan, stage: classify, link: /settings#/me/work/factory/9f1c2d3e}
   - tool: list_factory_work
@@ -30,7 +31,7 @@ fake_tools:
         head_sha: abc1234
         comments: []
   - tool: github__getRepository
-    output: {data: {full_name: example-co/widget, default_branch: main, description: "Synthetic sample"}}
+    output: {data: {full_name: example-org/factory-sample, default_branch: main, description: "Synthetic sample"}}
 expect_tools: [start_factory_work]
 expect_tool_args:
   start_factory_work: {issue_number: 12}

@@ -126,9 +126,10 @@ def _status(work_item: str) -> dict:
                 "pr_url", "evidence_url", "context_revision", "reply"):
         if rec.get(key) not in (None, ""):
             out[key] = rec[key]
-    if rec.get("plan_url"):
-        # Finished work: the result is the full record. Running work: the progress record.
-        result = (view.get("result") or {}).get("factory_v1") or {}
+    # Finished work: the result is the full record. Running work: the progress record.
+    result = (view.get("result") or {}).get("factory_v1") or {}
+    if rec.get("plan_url") or result.get("plan_digest"):
+        # Any work with a plan says whether it was approved, link or not.
         approved = result.get("plan_approved") or rec.get("plan_approved")
         out["plan_approval"] = (f"approved by {approved.get('by')} (version {approved.get('version')})" if approved
                                 else "not approved: this work's plan was not approved by anyone")

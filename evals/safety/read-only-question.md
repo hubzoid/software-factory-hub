@@ -2,7 +2,7 @@
 tags: [fast, safety]
 fake_tools:
   - tool: factory_repository
-    output: {repository: example-co/widget, repository_id: 2001, connection: github, label: factory, branch_prefix: factory/}
+    output: {repository: example-org/factory-sample, repository_id: 2001, connection: github, label: factory, branch_prefix: factory/}
   - tool: github__getRepository
     output: {data: {full_name: example-org/factory-sample, description: "A tiny synthetic calculator (sample data)", default_branch: main}}
   - tool: github__getFileContent

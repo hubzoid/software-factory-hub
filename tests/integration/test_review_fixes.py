@@ -268,3 +268,29 @@ def test_status_says_whether_a_plan_was_approved(factory, monkeypatch):
     key = f"factory_v1:item:{built['factory_v1']['work_item']}"
     state[key] = {k: v for k, v in state.get(key).items() if k != "plan_approved"}
     assert tools._status(built["factory_v1"]["work_item"])["plan_approval"].startswith("approved by")
+
+
+def test_status_says_whether_a_plan_was_approved_on_a_laptop(factory, monkeypatch):
+    # The laptop default: no public URL, and the plan is served from 127.0.0.1.
+    # factory_status still has to say whether the plan was approved (AGENTS.md).
+    import importlib.util
+
+    from hubzoid.workflows import context
+
+    monkeypatch.delenv("HUBZOID_PUBLIC_URL")
+    monkeypatch.setattr(context.Hub, "publish_artifact",
+                        lambda self, path, **kw: {"id": "art-1", "url": "http://127.0.0.1:8701/portal/artifacts/a-1"})
+    spec = importlib.util.spec_from_file_location("factory_tools", factory.hub_dir / "tools_local" / "factory.py")
+    tools = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tools)
+
+    class User:
+        email = h.OWNER
+
+    monkeypatch.setattr(tools, "_who", lambda: User())
+    factory.model.route = dict(factory.model.route, route="plan")
+    planned = factory.run(factory.chat("Plan the fix for total, stop after the plan", issue=12))
+    assert tools._status(planned["factory_v1"]["work_item"])["plan_approval"].startswith("not approved")
+    factory.model.route = dict(factory.model.route, route="implement")
+    built = factory.run(factory.chat("Fix total", issue=12))
+    assert tools._status(built["factory_v1"]["work_item"])["plan_approval"] == f"approved by {h.OWNER} (version 1)"
