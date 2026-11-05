@@ -17,6 +17,7 @@ import json
 from hubzoid import hub
 from hubzoid.stations import StationError, StationOutputError
 
+from . import builds as builds_lib
 from .errors import FactoryStop
 from .schemas import STATIONS
 
@@ -24,14 +25,52 @@ CLARIFY_SHAPE = ("Your previous answer did not match the required result. Return
                  "the fields of your result schema, every field present, nothing else.")
 
 
-def call(agent: str, message: str, *, stage: str, revision: int = 1, checkout: dict | None = None):
+def call(agent: str, message: str, *, stage: str, revision: int = 1, checkout: dict | None = None,
+         builds: str = "docker", setup: str | None = None, profile: str | None = None):
     """Run one station and return (validated result, call id). A station that
     still fails after its one retry stops the work with the reason on its
-    thread (open-swe: every run ends in a pull request or a clear stop)."""
+    thread (open-swe: every run ends in a pull request or a clear stop).
+
+    With `builds` "local", the analyst, implementer and reviewer run as their
+    ``local-`` versions in a work folder on this computer instead of a Docker
+    sandbox (``builds.py``); `setup` installs the repository's dependencies
+    from the registries the Docker `profile` allows."""
+    if builds == "local" and checkout is not None and agent in builds_lib.STATIONS:
+        return _call_local(agent, message, stage=stage, revision=revision, checkout=checkout, setup=setup,
+                           profile=profile)
+    return _call(agent, agent, message, stage=stage, revision=revision, checkout=checkout)
+
+
+def _call_local(agent: str, message: str, *, stage: str, revision: int, checkout: dict, setup: str | None,
+                profile: str | None):
+    from hubzoid.workflows import context
+
+    hub_dir = context._ctx().hub_dir
+    item = hub.work_item.id
+    ws = builds_lib.folder(hub_dir, item, f"g{hub.work_item.generation}-{stage}-r{revision}")
+    earlier = call_id(stage, revision)
+    try:
+        if earlier is None or builds_lib.record(earlier) is None:
+            # Not finished before: the folder is made (or kept, after a restart) and opened to the station.
+            builds_lib.prepare(hub_dir, ws, checkout, setup, hosts=builds_lib.registry_hosts(hub_dir, profile))
+            builds_lib.activate(hub_dir, item, ws, agent)
+        result, cid = _call(agent, builds_lib.station_name(agent), builds_lib.local_message(message), stage=stage,
+                            revision=revision, checkout=None)
+    except FactoryStop:
+        builds_lib.discard(hub_dir, item, ws)
+        raise
+    finally:
+        builds_lib.deactivate(hub_dir, item)
+    if cid:
+        builds_lib.finish(hub_dir, item, ws, cid, export=agent == "implementer")
+    return result, cid
+
+
+def _call(agent: str, station: str, message: str, *, stage: str, revision: int, checkout: dict | None):
     model = STATIONS[agent]
     try:
         try:
-            out = hub.call_agent(message, agent=agent, stage=stage, revision=revision, checkout=checkout)
+            out = hub.call_agent(message, agent=station, stage=stage, revision=revision, checkout=checkout)
         except StationOutputError as exc:
             out = hub.retry_station(exc.call_id, CLARIFY_SHAPE)
         except StationError as exc:
@@ -61,9 +100,13 @@ def call_id(stage: str, revision: int) -> str | None:
 
 def checkout_commit(call: str | None) -> str | None:
     """The commit a station's sandbox checkout started from (recorded by the
-    SDK when it cloned on the host)."""
+    SDK when it cloned on the host, or by the factory for a build on this
+    computer)."""
     if not call:
         return None
+    local = builds_lib.record(call)
+    if local is not None:
+        return local.get("commit")
     from hubzoid.sandbox import service as sandbox_service
     from hubzoid.workflows import context
 
@@ -80,6 +123,9 @@ def export_state(call: str | None) -> dict:
     out = {"commits": 0, "dirty": False}
     if not call:
         return out
+    local = builds_lib.record(call)
+    if local is not None:
+        return {"commits": int(local.get("commits") or 0), "dirty": bool(local.get("dirty"))}
     from hubzoid.sandbox import service as sandbox_service
     from hubzoid.workflows import context
 

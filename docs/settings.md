@@ -16,7 +16,9 @@ Settings are declared in `settings.yaml` and set in `hub.settings.yaml`. Check w
 | `FACTORY_REQUIRE_PLAN_APPROVAL` | boolean, `true` | Attended implementation waits for the requester to approve the exact plan. Unattended label work never waits on a person. |
 | `FACTORY_REVIEW_CYCLES` | integer 0 to 2, `2` | Revisions allowed after the reviewer requests changes. At the cap the work stops as `review_unresolved` with the pushed branch left for a person. |
 | `FACTORY_CI_ATTEMPTS` | integer 0 to 2, `2` | CI repair attempts per factory branch, counted once per failing head and kept across restarts. |
-| `FACTORY_SANDBOX_PROFILE` | string, `factory` | The sandbox profile (`sandboxes/<id>.yaml`) for the analyst, implementer and reviewer. Its reviewed `setup.command` installs the repository's dependencies before the agent starts. The agent then works offline. |
+| `FACTORY_BUILDS` | `auto`, `docker` or `local`, `auto` | Where the analyst, implementer and reviewer work. `auto` uses Docker when it is running, else builds locally. `docker` always uses Docker. `local` always builds locally, without Docker (macOS for now): a clone in a work folder in the system's temporary folder, with every command confined by macOS's sandbox to that folder, offline, with a clean environment and no access to your home folder. On Linux and Windows, use Docker. Each work item decides once and keeps its choice. |
+| `FACTORY_SANDBOX_PROFILE` | string, `factory` | The Docker sandbox profile (`sandboxes/<id>.yaml`) for the analyst, implementer and reviewer. Its reviewed `setup.command` installs the repository's dependencies before the agent starts. The agent then works offline. |
+| `FACTORY_LOCAL_SETUP` | string, empty | For local builds: the command that installs the repository's dependencies in each new work folder, before the agent starts. It runs in the repository folder, reaches only the package registries in the Docker profile's setup allowlist (`sandboxes/factory.yaml`), and may write only the work folder. Put Python dependencies in `"$FACTORY_ENV"`, a virtual environment outside the repository that is first on `PATH` afterwards. The sample uses `python3 -m venv "$FACTORY_ENV" && "$FACTORY_ENV/bin/python" -m pip install --quiet -r requirements-dev.txt`. |
 
 ## Not settings, on purpose
 
@@ -25,7 +27,7 @@ These are fixed policy, not options: no merge tool, no push to the default or a 
 ## Where other choices live
 
 - **Engines and models** are per station, in `agents/<station>/AGENTS.md` (`engine:` and `model:`). By default every station uses the hub's runtime (`MODEL` in `.env`, `claude-local` or `codex-local`) and the reviewer shares the implementer's vendor. To make the review cross-vendor, set `engine: codex-local` in `agents/reviewer/AGENTS.md`.
-- **The setup command** lives in the sandbox profile, `sandboxes/factory.yaml`, which is the reviewed file Hubzoid binds before any sandbox starts. A model can never change it.
+- **The setup command** lives in the sandbox profile, `sandboxes/factory.yaml`, which is the reviewed file Hubzoid binds before any sandbox starts. For local builds it is `FACTORY_LOCAL_SETUP`. A model can never change either.
 - **Pull request updates** are the write mode `github.pr_update: approve` in `work-items.yaml`.
 - **Who may ask** is Hubzoid access: the `wf_factory` workflow grant (or Run and control workflows), the `channel_<connection>` grant for each channel (for example `channel_github`), and account links for Slack, Linear and GitHub mentions.
 

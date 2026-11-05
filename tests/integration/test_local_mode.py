@@ -21,7 +21,8 @@ def mine(factory, tmp_path):
     folder = tmp_path / "mine"
     subprocess.run(["git", "clone", "--quiet", str(factory.remote.bare), str(folder)], env=h.GIT_ENV, check=True)
     (factory.hub_dir / "hub.settings.yaml").write_text(
-        f"version: 1\nvalues:\n  FACTORY_REPO: {folder}\n  FACTORY_CHANNELS: [chat, mcp]\nsecrets: {{}}\n")
+        f"version: 1\nvalues:\n  FACTORY_BUILDS: docker\n  FACTORY_REPO: {folder}\n  FACTORY_CHANNELS: [chat, mcp]\n"
+        "secrets: {}\n")
     (folder / "calc.py").write_text((folder / "calc.py").read_text() + "# my own note, not committed\n")
     (folder / "notes.txt").write_text("scratch\n")
     factory.remote.extra.append(folder)

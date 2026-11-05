@@ -30,7 +30,7 @@ def set_channels(factory, channels: list[str], **extra):
 
     lines = "".join(f"  {k}: {v}\n" for k, v in extra.items())
     (factory.hub_dir / "hub.settings.yaml").write_text(
-        f"version: 1\nvalues:\n  FACTORY_REPO: example-co/widget\n  FACTORY_CHANNELS: [{', '.join(channels)}]\n"
+        f"version: 1\nvalues:\n  FACTORY_BUILDS: docker\n  FACTORY_REPO: example-co/widget\n  FACTORY_CHANNELS: [{', '.join(channels)}]\n"
         f"{lines}secrets: {{}}\n")
     settings.forget()
 

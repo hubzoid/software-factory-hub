@@ -1,0 +1,81 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "problem_statement": {
+      "description": "What is actually wrong or wanted, as a precise engineering problem.",
+      "type": "string"
+    },
+    "approach": {
+      "description": "The chosen strategy, plus the main rejected alternative and why.",
+      "type": "string"
+    },
+    "plan": {
+      "description": "Ordered concrete steps, each independently verifiable. The smallest change that fully solves the problem.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "affected_surface": {
+      "description": "Files, modules, interfaces or systems touched. Public contracts called out.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "risks": {
+      "description": "What could break, edge cases, compatibility concerns, and mitigations.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "acceptance_criteria": {
+      "description": "Objective, testable criteria the reviewer checks one by one, verbatim.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "test_strategy": {
+      "description": "What to test and how, grounded in the repository's own setup.",
+      "type": "string"
+    },
+    "assumptions": {
+      "description": "Assumptions the plan rests on.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "open_questions": {
+      "description": "External facts not resolvable from the repository.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "handoff_id": {
+      "description": "The analysis handoff id, or null.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "problem_statement",
+    "approach",
+    "plan",
+    "affected_surface",
+    "risks",
+    "acceptance_criteria",
+    "test_strategy",
+    "assumptions",
+    "open_questions",
+    "handoff_id"
+  ],
+  "type": "object"
+}

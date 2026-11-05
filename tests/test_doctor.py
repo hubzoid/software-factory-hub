@@ -111,11 +111,45 @@ def test_sandbox_row_follows_the_sdk_sandbox_doctor(factory_hub, monkeypatch, re
     monkeypatch.setattr(sandbox_config, "check_profile", lambda *a, **k: None)
     monkeypatch.setattr(sandbox_service, "doctor", lambda hub_dir: report)
     ctx = _context(factory_hub)
-    ctx["settings"]["FACTORY_SANDBOX_PROFILE"] = "factory"
+    ctx["settings"].update(FACTORY_SANDBOX_PROFILE="factory", FACTORY_BUILDS="docker")
     row = _checks().sandbox(ctx)
     assert row["status"] == status and words in row["summary"] and row["card"] == card, row
     if status == "fail":
         assert row["recovery"] == "Start Docker, then run doctor again."
+
+
+DOCKER_DOWN = {"valid": False, "checks": [{"id": "provider:docker", "status": "fail",
+                                           "summary": "Docker is not reachable.",
+                                           "recovery_action": "Start Docker, then run doctor again."}]}
+DOCKER_UP = {"valid": True, "checks": [{"id": "provider:docker", "status": "pass", "summary": "Docker 27 reachable."}]}
+
+
+@pytest.mark.parametrize("setting,report,can_run_here,status,line", [
+    ("auto", DOCKER_DOWN, True, "ok", "Builds run locally"),         # Docker optional
+    ("auto", DOCKER_UP, True, "ok", "Docker running"),               # Docker first when it runs
+    ("auto", DOCKER_DOWN, False, "fail", "Docker not running"),      # not a Mac: Docker is the only way
+    ("local", DOCKER_UP, True, "ok", "Builds run locally"),
+    ("local", DOCKER_DOWN, False, "fail", "Builds need Docker here"),
+])
+def test_builds_row_follows_where_builds_run(factory_hub, monkeypatch, setting, report, can_run_here, status, line):
+    import sys
+
+    from hubzoid.sandbox import config as sandbox_config
+    from hubzoid.sandbox import service as sandbox_service
+
+    sys.path.insert(0, str(factory_hub / "workflows" / "factory"))
+    from software_factory import hostbox
+
+    monkeypatch.setattr(sandbox_config, "check_profile", lambda *a, **k: None)
+    monkeypatch.setattr(sandbox_service, "doctor", lambda hub_dir: report)
+    monkeypatch.setattr(hostbox, "unsupported", lambda: None if can_run_here else "Builds without Docker need macOS.")
+    monkeypatch.setattr(sys, "platform", "darwin")
+    ctx = _context(factory_hub)
+    ctx["settings"].update(FACTORY_SANDBOX_PROFILE="factory", FACTORY_BUILDS=setting, FACTORY_LOCAL_SETUP="true")
+    row = _checks().sandbox(ctx)
+    assert row["status"] == status and row["card"]["line"] == line, row
+    if setting == "auto" and line == "Builds run locally":
+        assert row["card"]["detail"] == "You can also use Docker"
 
 
 def test_a_paused_linear_connection_is_a_warning(factory_hub, conn):

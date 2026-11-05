@@ -21,7 +21,7 @@
   <a href="https://github.com/hubzoid/hubzoid/discussions"><img src="https://img.shields.io/badge/Community-Discussions-0B0B0C?logo=github" alt="GitHub Discussions"></a>
 </p>
 
-**The Software Factory is a ready-to-use Hubzoid hub that turns engineering requests into reviewed draft pull requests.** It classifies the work, plans in a real checkout of your repository, builds in an isolated sandbox, and has an independent reviewer check the exact commit. A person approves the plan, reviews the draft, marks it ready and merges.
+**The Software Factory is a ready-to-use Hubzoid hub that turns engineering requests into reviewed draft pull requests.** It classifies the work, plans in a real checkout of your repository, builds in an isolated sandbox (Docker, or locally in a confined work folder), and has an independent reviewer check the exact commit. A person approves the plan, reviews the draft, marks it ready and merges.
 
 <p align="center">
   <a href="https://youtu.be/gOlEus5hQzs"><img alt="Watch: from tickets to reviewed pull request" src="https://img.youtube.com/vi/gOlEus5hQzs/maxresdefault.jpg" width="640"></a>
@@ -31,7 +31,7 @@
 
 - **Classifier** triages the request: type, priority, complexity, and whether it is actionable. When it is not, the factory asks the requester instead of building the wrong thing.
 - **Analyst** writes a plan with acceptance criteria, working from a real checkout of your repository. Attended requests wait here for the requester to approve the exact plan.
-- **Implementer** carries out the plan in its own Docker sandbox, with no network and no credentials, and runs your repository's own checks. Workflow code checks the patch and pushes it to a factory branch. The agent never holds a GitHub token.
+- **Implementer** carries out the plan in its own sandbox, with no network and no credentials, and runs your repository's own checks. Workflow code checks the patch and pushes it to a factory branch. The agent never holds a GitHub token.
 - **Reviewer** judges the pushed commit in a fresh checkout against every acceptance criterion, with evidence for each verdict. At most two revisions. The draft pull request opens only when the branch, the pushed commit and the reviewed commit are the same.
 - **Factory brain.** Durable facts about your repository in `knowledge/factory-brain/`, which every station reads and only reviewed hub changes update.
 
@@ -39,7 +39,7 @@ Every request is one work item. A restart resumes it from its last saved step, a
 
 ## Quick start
 
-You need Python 3.12, Git, a running Docker engine, and Claude Code or Codex signed in on this machine. No API key. For the GitHub path you also need the GitHub CLI (`gh`) signed in, to create a private scratch repository for the sample. Local repository mode, below, needs neither GitHub nor `gh`.
+You need Python 3.12, Git, and Claude Code or Codex signed in on this machine. No API key. Docker is optional on macOS: without it, builds run locally in a confined work folder (see [Builds without Docker](#builds-without-docker)). On Linux and Windows, use Docker. For the GitHub path you also need the GitHub CLI (`gh`) signed in, to create a private scratch repository for the sample. Local repository mode, below, needs neither GitHub nor `gh`.
 
 Paste this into Claude Code or Codex:
 
@@ -122,16 +122,17 @@ software-factory/
 │   ├── classifier/AGENTS.md         how requests are triaged
 │   ├── analyst/AGENTS.md            how plans are written
 │   ├── implementer/AGENTS.md        how the sandbox build runs
-│   └── reviewer/AGENTS.md           how the review judges a commit. Set engine: codex-local for a cross-vendor review
+│   ├── reviewer/AGENTS.md           how the review judges a commit. Set engine: codex-local for a cross-vendor review
+│   └── local-*/AGENTS.md            the same three stations for builds without Docker
 ├── knowledge/factory-brain/         durable facts about each repository, one file per owner-repo (local-folder-hash in local mode)
 ├── hub.settings.yaml                FACTORY_REPO, channels, whether plans need approval
-├── sandboxes/factory.yaml           the Docker sandbox and its reviewed setup command
+├── sandboxes/factory.yaml           the Docker sandbox and its reviewed setup command (FACTORY_LOCAL_SETUP without Docker)
 └── channels/                        the GitHub, Linear and Slack connections
 ```
 
 Each station is one page of instructions. Edit it in your checkout and review the change like any commit.
 
-To point it at your own repository, set `FACTORY_REPO` in `hub.settings.yaml` (`OWNER/REPO` on GitHub, or the path of a Git folder on this computer, starting with `/` or `~/`) and replace the install in `sandboxes/factory.yaml` with your repository's locked install, such as `npm ci` or `uv sync --frozen`. Then bootstrap a source-linked brief from committed files you choose:
+To point it at your own repository, set `FACTORY_REPO` in `hub.settings.yaml` (`OWNER/REPO` on GitHub, or the path of a Git folder on this computer, starting with `/` or `~/`) and replace the install in `sandboxes/factory.yaml` (Docker) or `FACTORY_LOCAL_SETUP` (without Docker) with your repository's locked install, such as `npm ci` or `uv sync --frozen`. Then bootstrap a source-linked brief from committed files you choose:
 
 ```bash
 python scripts/factory_setup.py context --checkout PATH --repository OWNER/REPO --source FILE --test-command 'CMD'
@@ -142,6 +143,14 @@ python scripts/factory_setup.py context --checkout ~/code/x --repository ~/code/
 Review the preview, then store it as a pending hub change for a hub manager to apply. Start with plan-only requests, and move to implementation once the plans read right. [SETUP.md](SETUP.md), steps 2 and 4
 
 To save a team rule from chat, tell the factory *"Remember for the team: run the tests with `pnpm test --runInBand`."* It proposes the exact edit to `knowledge/factory-brain/<owner>-<repo>.md`, a hub manager applies it, and every station sees it on the next run. A correction in chat is not shared until that edit is applied. [Settings](docs/settings.md)
+
+## Builds without Docker
+
+`FACTORY_BUILDS` decides where the analyst, implementer and reviewer work. The default, `auto`, uses Docker when it is running and builds locally when it isn't. `docker` and `local` pick one. Doctor's Builds row and the Builds card say which applies.
+
+Locally, each station works in a fresh clone in a temporary work folder, through its `repo_*` tools. Every command runs under macOS's own sandbox (`sandbox-exec`): it can write only the work folder, can't read your home folder or other people's files, has no network, no keychain and no access to your terminals, and gets a clean environment with no API keys or tokens. `FACTORY_LOCAL_SETUP` installs the repository's dependencies first. It reaches only the package registries listed in `sandboxes/factory.yaml`, through a proxy the factory runs for that step alone, the same allowlist Docker uses. The sample's setup puts them in a virtual environment outside the repository. The factory then exports the commits as a patch and checks and publishes them exactly as it does with Docker.
+
+Docker isolates more: its own file system, and CPU and memory limits. Locally, commands can't reach `localhost` either, so tests that start a local server fail. Local builds need macOS for now; on Linux and Windows, use Docker.
 
 ## Safety
 
@@ -155,7 +164,7 @@ An implement request is about five agent turns plus small routing calls, more wi
 
 The factory runs on a server the same way any Hubzoid hub does: one image built from this repository, one durable folder at `/data`, sign-in on, and one public address. Three things are specific to the factory:
 
-- **A Docker engine the hub can reach**, for the sandbox.
+- **A Docker engine the hub can reach**, for the sandbox. Local builds are for a Mac you run the factory on yourself.
 - **`HUBZOID_SCHEDULES=1`**, so work items run in the background. It is set in `.env.example`.
 - **`HUBZOID_PUBLIC_URL`**, your hub's HTTPS address, which the GitHub App webhook posts to.
 

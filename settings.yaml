@@ -56,7 +56,14 @@ settings:
     default: 2
     minimum: 0
     maximum: 2
+  - name: FACTORY_BUILDS
+    description: Where the analyst, implementer and reviewer work. auto uses Docker when it is running, else builds locally. docker always uses Docker. local always builds locally (macOS for now), with commands confined to a work folder, offline and without credentials.
+    default: auto
+    regex: '^(auto|docker|local)$'
   - name: FACTORY_SANDBOX_PROFILE
-    description: The sandbox profile (sandboxes/<id>.yaml) the analyst, implementer and reviewer use. Its setup command installs the repository's dependencies before the agent starts, offline.
+    description: The Docker sandbox profile (sandboxes/<id>.yaml) the analyst, implementer and reviewer use. Its setup command installs the repository's dependencies before the agent starts, offline.
     default: factory
     regex: '^[a-z0-9][a-z0-9_-]{0,63}$'
+  - name: FACTORY_LOCAL_SETUP
+    description: For local builds, the command that installs the repository's dependencies in each new work folder, before the agent starts. It runs in the repository's folder, reaches only the package registries in sandboxes/factory.yaml, and may write only the work folder. Put Python dependencies in "$FACTORY_ENV" (a virtual environment outside the repository), which is first on PATH afterwards. Empty means no setup.
+    default: ""
