@@ -24,6 +24,8 @@ Read `SETUP.md` and `docs/settings.md`. Check Python 3.12, Git, Docker and the s
 
 Ask which repository the factory should work on and what you may do with it. A scratch repository the person owns is the best first choice. Creating a repository, seeding issues or resetting the demo needs their explicit go-ahead.
 
+If they have no GitHub, or want to try it on their own computer first, offer local repository mode: `FACTORY_REPO` is the path of a Git folder (starting with `/` or `~/`), the top folder of its repository, outside the hub, with at least one commit on a branch. Results are reviewed branches in that folder. Skip step 4 (Connect GitHub) and set `FACTORY_CHANNELS: [chat, mcp]`. For the sample, copy `fixtures/sample-repo` out of the hub and `git init` and commit it there, as `SETUP.md` step 2 shows.
+
 ## 3. Review the settings
 
 Follow `SETUP.md` step 2. Install from `requirements.txt` (Hubzoid 2.0.1 or later). Preview the settings diff, the sandbox dependency-install command and the connection permissions, and show them before applying. Keep the person's existing settings and `.env` values. Do not fall back to a paid API key or add a second runtime unless they ask.

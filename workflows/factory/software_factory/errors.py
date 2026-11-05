@@ -50,6 +50,9 @@ REASONS = {
     "untrusted_origin": "Start factory work from a connected channel, chat or MCP. A request cannot claim to be "
                         "a channel event it did not come from.",
     "channel_not_enabled": "An administrator adds this channel to FACTORY_CHANNELS in Setup, then you ask again.",
+    "local_mode": "Describe the change you want in your own words and ask for a plan or a change.",
+    "local_write_failed": "Nothing in your repository was changed. Read the reason, fix the folder if it names "
+                          "a problem there, then ask again.",
     "unexpected_error": "An administrator opens the work item under Settings, My work items, reads the error and "
                         "restarts or cancels it.",
 }

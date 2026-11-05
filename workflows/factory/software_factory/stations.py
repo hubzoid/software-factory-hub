@@ -165,7 +165,9 @@ def reviewer_message(request, ground: dict, analysis, implementation, brain: str
     msg += _data("Analysis and plan", analysis.model_dump(exclude={"handoff_id"}))
     if analysis.handoff_id:
         msg += f"\n\nThe full analysis is handoff `{analysis.handoff_id}`. Open it with read_handoff first."
-    msg += _data("Implementer's report", implementation.model_dump())
+    # The implementer's own head_commit is left out: publishing re-applies its
+    # patch, so the commit under review is pushed_sha, named in the task below.
+    msg += _data("Implementer's report", implementation.model_dump(exclude={"head_commit"}))
     msg += brain
     criteria = "\n".join(f"- {c}" for c in analysis.acceptance_criteria)
     return msg + (f"\n\n## Task\n\nThe pushed branch `{branch}` is checked out at /workspace/repo at commit "

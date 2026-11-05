@@ -1,0 +1,24 @@
+version: 1
+# The setup cards a manager sees on the chat's empty screen (Hubzoid 2.0.8 and later; older versions ignore
+# this file). Each card follows one check: `model` is the agent's model login, the rest are doctor checks from
+# hub.manifest.yaml, so a card says the same as `hubzoid hub doctor .`.
+title: Get started
+cards:
+  - id: model
+    title: Model
+    check: model
+  - id: code
+    title: Code
+    check: factory.github
+  - id: requests
+    title: Requests
+    check: factory.channels
+  - id: builds
+    title: Builds
+    check: factory.sandbox
+  - id: background
+    title: Background work
+    check: factory.runtime
+  - id: results
+    title: Results
+    check: factory.settings

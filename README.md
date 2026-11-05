@@ -39,7 +39,7 @@ Every request is one work item. A restart resumes it from its last saved step, a
 
 ## Quick start
 
-You need Python 3.12, Git, a running Docker engine, and Claude Code or Codex signed in on this machine. No API key. For the first run you also need the GitHub CLI (`gh`) signed in, to create a private scratch repository for the sample.
+You need Python 3.12, Git, a running Docker engine, and Claude Code or Codex signed in on this machine. No API key. For the GitHub path you also need the GitHub CLI (`gh`) signed in, to create a private scratch repository for the sample. Local repository mode, below, needs neither GitHub nor `gh`.
 
 Paste this into Claude Code or Codex:
 
@@ -61,9 +61,18 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Keep the folder name `software-factory`: it is the hub's name, and the channel files use it. `.env` uses Claude Code (`MODEL=claude-local`). For Codex, set `MODEL=codex-local`.
+Keep the folder name `software-factory` when you use GitHub: it is the hub's name, and the channel files use it. In local repository mode the name doesn't matter. `.env` uses Claude Code (`MODEL=claude-local`). For Codex, set `MODEL=codex-local`.
 
-Create the scratch repository from the labelled sample, with a planted rounding bug and a failing regression test, and add its issues:
+No GitHub? Use local repository mode: copy the sample out of the hub and make it a Git repository, then point the factory at the folder. Each result is a reviewed branch in that folder. Your working tree and current branch are not touched.
+
+```bash
+cp -R fixtures/sample-repo ~/code/factory-sample
+(cd ~/code/factory-sample && git init -q -b main && git add -A && git commit -qm "Sample")
+```
+
+In `hub.settings.yaml`, set `FACTORY_REPO: ~/code/factory-sample` and `FACTORY_CHANNELS: [chat, mcp]`, skip the GitHub steps below, and go straight to `hubzoid hub doctor .`. Then ask in chat, for example "Fix the rounding bug in invoice totals", and approve the plan. When it's done, `git switch` to the branch it names.
+
+With GitHub, create the scratch repository from the labelled sample, with a planted rounding bug and a failing regression test, and add its issues:
 
 ```bash
 cp -R fixtures/sample-repo ../factory-sample
@@ -77,6 +86,8 @@ Point the factory at `OWNER/factory-sample` and connect GitHub ([SETUP.md](SETUP
 hubzoid hub doctor .
 hubzoid run . --port 8701 --bridge-port 8702
 ```
+
+On Hubzoid 2.0.8 or later, the chat's empty screen also shows the agent's managers its setup cards (`get-started.yaml`): the model login and the main doctor checks, each with its fix.
 
 In the web chat at **http://127.0.0.1:8701**, ask:
 
@@ -112,7 +123,7 @@ software-factory/
 │   ├── analyst/AGENTS.md            how plans are written
 │   ├── implementer/AGENTS.md        how the sandbox build runs
 │   └── reviewer/AGENTS.md           how the review judges a commit. Set engine: codex-local for a cross-vendor review
-├── knowledge/factory-brain/         durable facts about each repository, one file per owner-repo
+├── knowledge/factory-brain/         durable facts about each repository, one file per owner-repo (local-folder-hash in local mode)
 ├── hub.settings.yaml                FACTORY_REPO, channels, whether plans need approval
 ├── sandboxes/factory.yaml           the Docker sandbox and its reviewed setup command
 └── channels/                        the GitHub, Linear and Slack connections
@@ -120,10 +131,12 @@ software-factory/
 
 Each station is one page of instructions. Edit it in your checkout and review the change like any commit.
 
-To point it at your own repository, set `FACTORY_REPO` in `hub.settings.yaml` and replace the install in `sandboxes/factory.yaml` with your repository's locked install, such as `npm ci` or `uv sync --frozen`. Then bootstrap a source-linked brief from committed files you choose:
+To point it at your own repository, set `FACTORY_REPO` in `hub.settings.yaml` (`OWNER/REPO` on GitHub, or the path of a Git folder on this computer, starting with `/` or `~/`) and replace the install in `sandboxes/factory.yaml` with your repository's locked install, such as `npm ci` or `uv sync --frozen`. Then bootstrap a source-linked brief from committed files you choose:
 
 ```bash
 python scripts/factory_setup.py context --checkout PATH --repository OWNER/REPO --source FILE --test-command 'CMD'
+# local repository mode: the folder is both the checkout and the repository
+python scripts/factory_setup.py context --checkout ~/code/x --repository ~/code/x --source FILE --test-command 'CMD'
 ```
 
 Review the preview, then store it as a pending hub change for a hub manager to apply. Start with plan-only requests, and move to implementation once the plans read right. [SETUP.md](SETUP.md), steps 2 and 4

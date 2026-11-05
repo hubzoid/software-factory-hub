@@ -4,7 +4,7 @@ Settings are declared in `settings.yaml` and set in `hub.settings.yaml`. Check w
 
 | Setting | Type and default | What it does |
 |---|---|---|
-| `FACTORY_REPO` | string, required | The GitHub repository, as `owner/name`. It must be one of the GitHub connection's repositories. The factory never switches repositories on its own. |
+| `FACTORY_REPO` | string, required | The repository, in one of two forms. `owner/name`: a GitHub repository, which must be one of the GitHub connection's repositories. A folder path starting with `/` or `~/`: local repository mode, with no GitHub. The folder must be the top folder of a Git repository outside the hub, with at least one commit on a branch; its current branch is the base, and each result is a reviewed branch in that folder (plans and changes only, no issues or pull requests). The factory never switches repositories on its own. |
 | `FACTORY_LABEL` | string, `factory` | The issue label that hands an issue to the factory. With verified webhook delivery, adding it starts unattended work ending in a reviewed draft. Laptop PAT mode uses manual intake until forwarding is configured. Keep it equal to `rules.label` in `channels/github.yaml`. |
 | `FACTORY_BRANCH_PREFIX` | string, `factory/` | Prefix of every branch the factory creates (`factory/12-bug-fix-total-1a2b3c`). A prefix is never proof of ownership: CI repairs need the factory's own record of the push. |
 | `FACTORY_BOT_NAME` | string, empty | The name people mention on GitHub. Empty uses the GitHub App's own name. Token mode needs it. |

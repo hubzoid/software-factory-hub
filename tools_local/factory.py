@@ -88,13 +88,24 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
         return {"refused": exc.message, "code": exc.code}
     from hubzoid.hubs import settings
 
-    gated = route in ("auto", "implement") and (show_plan_first or settings.effective(_hub_dir()).get(
-        "FACTORY_REQUIRE_PLAN_APPROVAL", True))
+    values = settings.effective(_hub_dir())
+    gated = route in ("auto", "implement") and (show_plan_first or values.get("FACTORY_REQUIRE_PLAN_APPROVAL", True))
+    if _is_local(values):
+        note = ("Nothing is built until you approve this work's plan, here or in your Inbox. " if gated else "")
+        return {"work_item": item["id"], "state": item["state"], "created": created, "link": _link(item["id"]),
+                "note": note + f"The factory works in the background on the folder {values['FACTORY_REPO']}. The "
+                               "result is a reviewed branch in that folder: there is no issue or pull request, and "
+                               "your working tree and current branch are not touched. Ask for its status any time."}
     note = ("Nothing is built until you approve this work's plan in your Inbox. A plan you already approved in "
             "earlier work that stopped before a pull request is built without asking again. " if gated else "")
     return {"work_item": item["id"], "state": item["state"], "created": created, "link": _link(item["id"]),
             "note": note + "The factory works in the background. Pull request updates wait for your approval under "
                            "your Inbox. Ask for its status any time."}
+
+
+def _is_local(values: dict) -> bool:
+    """Local repository mode: FACTORY_REPO is a folder path, not owner/name."""
+    return str(values.get("FACTORY_REPO") or "").startswith(("/", "~/"))
 
 
 def _status(work_item: str) -> dict:
@@ -149,6 +160,12 @@ def _repository() -> dict:
     from hubzoid.hubs import settings
 
     values = settings.effective(_hub_dir())
+    if _is_local(values):
+        return {"repository": values["FACTORY_REPO"], "mode": "local",
+                "note": "A folder on this computer, not a GitHub repository: there are no issues or pull requests, "
+                        "and the GitHub tools do not apply to it. The factory plans and builds changes on it and "
+                        "leaves each result as a reviewed local branch.",
+                "branch_prefix": values.get("FACTORY_BRANCH_PREFIX")}
     wanted = (values.get("FACTORY_REPO") or "").lower()
     cid = values.get("FACTORY_GITHUB_CONNECTION") or "github"
     try:
@@ -165,7 +182,8 @@ def _repository() -> dict:
 @function_tool
 async def factory_repository() -> str:
     """The repository the factory works on and its numeric repository_id. Call it once before the GitHub read
-    tools (github__getFileContent, github__searchCode and the rest), which all take that repository_id."""
+    tools (github__getFileContent, github__searchCode and the rest), which all take that repository_id. When it
+    returns mode: local, the repository is a folder on this computer and the GitHub tools do not apply."""
     return json.dumps(await asyncio.to_thread(_repository))
 
 
@@ -173,7 +191,9 @@ async def factory_repository() -> str:
 async def start_factory_work(request: str, issue_number: int | None = None, route: str = "auto",
                              from_work_item: str | None = None, show_plan_first: bool = False) -> str:
     """Hand engineering work to the Software Factory as the person asking. It classifies, plans, implements in
-    an isolated sandbox, gets an independent review and opens a draft pull request (it never merges). Use it
+    an isolated sandbox, gets an independent review and opens a draft pull request (it never merges). When the
+    repository is a folder on this computer (factory_repository says mode: local), the result is a reviewed local
+    branch in that folder instead, and only plans and changes are possible, with no issue numbers. Use it
     when the person asks to triage, plan, fix, build, change or revise something in the repository, or to update
     supported pull request metadata. Marking a draft ready and merging require the person in GitHub. Do not use it for questions you can answer by reading the repository.
 
