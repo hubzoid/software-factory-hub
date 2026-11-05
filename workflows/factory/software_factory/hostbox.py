@@ -306,25 +306,34 @@ class RegistryProxy:
         self._server: socket.socket | None = None
         self._open: set[socket.socket] = set()
         self._lock = threading.Lock()
+        self._closed = False
+        self._thread: threading.Thread | None = None
 
     def __enter__(self) -> "RegistryProxy":
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.bind(("127.0.0.1", 0))
         server.listen(64)
         self._server, self.port = server, server.getsockname()[1]
-        threading.Thread(target=self._serve, daemon=True).start()
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
         return self
 
     def __exit__(self, *exc) -> None:
-        if self._server is not None:
-            self._server.close()
+        self._closed = True
+        # Shut down before closing: on Linux, closing a socket another thread is
+        # waiting on leaves it listening (or connected) until that wait ends.
+        socks = [self._server] if self._server is not None else []
         with self._lock:
-            for sock in list(self._open):
+            socks += list(self._open)
+            self._open.clear()
+        for sock in socks:
+            for end in (lambda s: s.shutdown(socket.SHUT_RDWR), lambda s: s.close()):
                 try:
-                    sock.close()
+                    end(sock)
                 except OSError:
                     pass
-            self._open.clear()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
 
     def _track(self, sock: socket.socket) -> socket.socket:
         with self._lock:
@@ -336,6 +345,9 @@ class RegistryProxy:
             try:
                 conn, _ = self._server.accept()
             except OSError:
+                return
+            if self._closed:                       # accepted just as the setup step ended
+                conn.close()
                 return
             threading.Thread(target=self._handle, args=(self._track(conn),), daemon=True).start()
 
