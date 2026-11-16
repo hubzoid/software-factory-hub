@@ -4,6 +4,7 @@
 
 - Laptop: `hubzoid run . --port 8701 --bridge-port 8702` with `HUBZOID_SCHEDULES=1` in `.env`. Without it, work items never run.
 - Hosted: follow Hubzoid's Railway or Maritime guide (SDK `docs/deploy/`; Maritime is the second hosting provider Hubzoid documents, next to Railway), with a GitHub App (not a personal token), `HUBZOID_PUBLIC_URL` set for webhooks, and a separate sandbox service when the host has no Docker. Use runtime authentication that the provider supports for hosted use. A local login alone is not enough for hosted/shared operation.
+- A private repository is cloned for each station with the host's own Git access (Hubzoid's sandbox checkout, SDK `docs/sandbox.md`), never with the GitHub connection's token. On a server, give the account that runs Hubzoid read access to that one repository, for example a Git credential helper scoped to its URL (`git config --global credential.https://github.com/OWNER/REPO.git.helper ...` with `useHttpPath true`) holding a read-only token, or a deploy key over SSH. Without it the first station stops with `checkout_failed`: "could not read Username".
 - Pause new work with `FACTORY_INTAKE_ENABLED: false` (Setup in the Console, or `hub.settings.yaml`). Like every hub setting it applies when the hub restarts. Waiting decisions, recovery and cancellation continue. To stop GitHub events at once without a restart, pause the channel: Channels in the Console, or `hubzoid channels pause . github --expected-revision N`.
 
 ## Watching

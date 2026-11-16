@@ -22,6 +22,9 @@ Every stop says why and what to do next, on the issue or in `factory_status`. Th
 | `repository_unavailable` | `FACTORY_REPO` is not in the GitHub connection, or a write targeted another repository | Fix the setting or the App installation |
 | `intake_paused` | `FACTORY_INTAKE_ENABLED` is false | Turn it back on in Setup and restart the hub (settings apply on restart) |
 | `stopped_by_requester` | The requester wrote "stop" | Nothing more runs |
+| `checkout_failed` "could not read Username" | The host has no Git access to a private repository | Give the account running Hubzoid read access to it ([Operations](operations.md), Running), then ask again |
+| `ci_failed_before_pr` | With `FACTORY_CI_BEFORE_PR`, the repository's checks still failed after the allowed revisions | No pull request was opened. A person takes it from the pushed branch |
+| `clickup_unavailable` | A ClickUp task named in chat could not be read through `FACTORY_CLICKUP_CONNECTION` | Connect ClickUp (Channels, ClickUp) and check the task is in a list the channel serves |
 
 Codes from Hubzoid itself:
 
