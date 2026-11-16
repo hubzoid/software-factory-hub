@@ -30,18 +30,18 @@ IMPLICIT = {
 
 @dataclass
 class Subject:
-    kind: str = "none"                  # github_issue, github_pr, linear_issue, none
+    kind: str = "none"                  # github_issue, github_pr, linear_issue, clickup_task, none
     number: int | None = None
     repository_id: int | None = None
     full_name: str | None = None
-    identifier: str | None = None       # a Linear identifier such as ENG-12
+    identifier: str | None = None       # a Linear identifier such as ENG-12, or a ClickUp task id
     url: str | None = None
     title: str | None = None
 
 
 @dataclass
 class Request:
-    source: str                         # github, slack, linear, chat, mcp, api
+    source: str                         # github, slack, linear, clickup, chat, mcp, api
     trigger: str                        # mention, review_mention, label, pull_request, ci_failure, chat, api, ...
     instruction: str                    # the requester's own words (or the trigger's implicit task)
     subject: Subject = field(default_factory=Subject)
@@ -114,6 +114,15 @@ def _from_channel(p: dict) -> Request:
         if data.get("prompt_context"):
             untrusted["linear_context"] = _clip(data["prompt_context"])
         untrusted["agent_session_id"] = data.get("agent_session_id")
+    elif provider == "clickup":
+        task = data.get("task") or {}
+        tid = str(task.get("custom_id") or task.get("id") or coords.get("task_id") or "")[:64] or None
+        subject = Subject(kind="clickup_task", identifier=tid, url=task.get("url") or origin.get("url"),
+                          title=(task.get("name") or "")[:300] or None)
+        # A status move or a tag carries no typed instruction: the task is the request's data.
+        instruction = "Work on the ClickUp task this was started from." if kind == "task_ready" else text
+        if task:
+            untrusted["clickup_task"] = clickup_context(task)
     else:
         instruction = text
         untrusted.update({k: data[k] for k in ("channel", "thread_ts") if k in data})
@@ -132,6 +141,9 @@ def _from_direct(p: dict) -> Request:
         subject = Subject(kind=raw["kind"], number=_int(raw.get("number")))
     elif isinstance(raw, dict) and raw.get("kind") == "linear_issue":
         subject = Subject(kind="linear_issue", identifier=str(raw.get("identifier") or "")[:40] or None)
+    elif isinstance(raw, dict) and raw.get("kind") == "clickup_task":
+        tid = clickup_task_id(raw.get("identifier"))
+        subject = Subject(kind="clickup_task", identifier=tid) if tid else Subject()
     route = p.get("route") if isinstance(p.get("route"), str) else None
     return Request(source=source, trigger=source, instruction=_clip(p.get("request") or p.get("text")),
                    subject=subject, from_work_item=p.get("from_work_item") if isinstance(
@@ -141,7 +153,29 @@ def _from_direct(p: dict) -> Request:
 
 #: The FACTORY_CHANNELS name for each source. The API is programmatic, like MCP.
 CHANNEL_SETTING = {"chat": "chat", "mcp": "mcp", "api": "mcp", "github": "github", "linear": "linear",
-                   "slack": "slack", "slack_assistant": "slack"}
+                   "clickup": "clickup", "slack": "slack", "slack_assistant": "slack"}
+
+
+def clickup_task_id(value) -> str | None:
+    """A ClickUp task id from an id or a task link (app.clickup.com/t/<id>)."""
+    import re
+
+    text = str(value or "").strip()
+    m = re.search(r"app\.clickup\.com/t/(?:[0-9]+/)?([A-Za-z0-9_-]{1,64})", text)
+    if m:
+        return m.group(1)
+    return text if re.fullmatch(r"#?[A-Za-z0-9_-]{1,64}", text) and text else None
+
+
+def clickup_context(task: dict) -> str:
+    """The task as data for the stations: name, list, status, tags, description."""
+    lines = [f"Task: {task.get('name') or ''}".strip(),
+             f"Link: {task.get('url') or ''}".strip(),
+             f"List: {task.get('list') or ''}  Status: {task.get('status') or ''}".strip()]
+    if task.get("tags"):
+        lines.append("Tags: " + ", ".join(str(t) for t in task["tags"] if t))
+    lines += ["", "Description:", task.get("description") or "(none)"]
+    return _clip("\n".join(lines))
 
 
 def channel_setting(request: Request) -> str:

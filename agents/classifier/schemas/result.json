@@ -46,7 +46,7 @@
       "type": "boolean"
     },
     "questions": {
-      "description": "Specific clarifying questions. Empty unless needs_clarification is true.",
+      "description": "At most 3 clarifying questions, decisions first, each one short sentence a non-technical person can answer, in plain words (no file names, code or engineering terms), ending with 2 or 3 suggested answers as '(a) ... (b) ...', the recommended one first. Empty unless needs_clarification is true.",
       "items": {
         "type": "string"
       },

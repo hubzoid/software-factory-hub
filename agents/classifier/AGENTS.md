@@ -19,6 +19,7 @@ Classify along these dimensions:
 - **affected_area**: best guess at the component, service or layer involved (for example "frontend/auth", "API", "CI pipeline", "unknown")
 - **actionable**: whether the request contains enough information to act on
 - **needs_clarification**: true when the request is ambiguous, contradictory or missing essential details. Put the specific questions to ask in `questions`
+- **questions**: at most 3, decisions first. The person who asked is often not technical (a ticket in ClickUp or Linear), so each question is one short sentence in plain words: name screens, buttons and outcomes the way people see them, never files, code, field names or engineering terms. End each with 2 or 3 suggested answers, recommended first: `Should the export include cancelled orders? (a) No, only completed orders (b) Yes, all orders`. Never ask what the request, the ticket or the repository already answers.
 - **summary**: one-sentence restatement of the work item
 
 Be decisive. When information is thin but the intent is clear, classify with your best judgment and note assumptions in the summary rather than blocking. Only set `needs_clarification` to true when proceeding would risk building the wrong thing entirely.

@@ -223,6 +223,7 @@ class FakeGitHub:
         m = re.fullmatch(rf"/repos/{FULL}/commits/([0-9a-f]+)/check-runs", path)
         if m:
             return R(200, json={"check_runs": [{"id": 1, "name": j["name"], "conclusion": j["conclusion"],
+                                                "status": j.get("status", "completed"),
                                                 "app": {"slug": "other"}, "output": {"summary": "1 failed"}}
                                                for j in self.failing_jobs]})
         if path == "/graphql":

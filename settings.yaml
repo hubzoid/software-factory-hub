@@ -31,11 +31,25 @@ settings:
     description: The id of the Slack channel connection, when Slack is in FACTORY_CHANNELS.
     default: ""
     regex: '^$|^[a-z0-9][a-z0-9_-]{0,63}$'
+  - name: FACTORY_CLICKUP_CONNECTION
+    description: The id of the ClickUp channel connection. A task moved to its trigger status starts work when clickup is in FACTORY_CHANNELS, and a ClickUp task named in chat is read through it.
+    default: ""
+    regex: '^$|^[a-z0-9][a-z0-9_-]{0,63}$'
   - name: FACTORY_CHANNELS
     description: Where people may ask the factory for work. Each enabled channel must pass doctor.
     type: string_list
     default: [chat, mcp, github]
-    enum: [chat, mcp, github, linear, slack]
+    enum: [chat, mcp, github, linear, clickup, slack]
+  - name: FACTORY_CI_BEFORE_PR
+    description: True makes the factory wait for the repository's own checks (GitHub Actions or other check runs) on the reviewed commit before it opens the draft pull request. Failing checks go back to the implementer within FACTORY_REVIEW_CYCLES, and no pull request opens while they fail. The repository's CI must run on a push to the factory's branches.
+    type: boolean
+    default: false
+  - name: FACTORY_CI_WAIT_MINUTES
+    description: How long to wait for those checks before opening the pull request anyway, with a note.
+    type: integer
+    default: 30
+    minimum: 1
+    maximum: 120
   - name: FACTORY_INTAKE_ENABLED
     description: False stops new work after the hub restarts. Waiting decisions, recovery and cancellation still work. To stop GitHub events at once, pause the channel.
     type: boolean

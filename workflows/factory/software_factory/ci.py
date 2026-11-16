@@ -261,3 +261,41 @@ def _revision_of(repo) -> str:
     from . import brain
 
     return brain.revision(context._ctx().hub_dir, repo.full_name)
+
+
+# -- CI before the pull request ------------------------------------------------------------
+
+#: check conclusions that count as passing; anything else that finished is a failure
+PASSING = ("success", "neutral", "skipped")
+#: how long a commit may have no checks at all before "this repository runs no CI on a push"
+NO_CHECKS_GRACE_SECONDS = 120
+POLL_SECONDS = 20
+
+
+def wait_before_pr(repository_id: int, head_sha: str, *, minutes: int) -> dict:
+    """Wait for the repository's own checks on the pushed commit, before any
+    pull request exists (VisionForge Foreman's gate, with the repository's CI
+    as the runner: the factory, not a model, decides from the checks' own
+    conclusions). Returns ``{"state": "success" | "failure" | "none" |
+    "timeout", "failed": [names], "checks": n}``. "none" means no check started
+    for this commit within two minutes: the repository runs no CI on a push."""
+    import time
+
+    deadline = time.monotonic() + max(1, minutes) * 60
+    first_seen = time.monotonic() + NO_CHECKS_GRACE_SECONDS
+    while True:
+        runs = github.read("listCheckRuns", repository_id=repository_id, head_sha=head_sha, page_size=100)["data"]
+        runs = runs if isinstance(runs, list) else (runs or {}).get("items") or []
+        if runs:
+            pending = [r for r in runs if (r.get("status") or "") != "completed"]
+            failed = [r.get("name") or "check" for r in runs
+                      if (r.get("status") == "completed" and (r.get("conclusion") or "") not in PASSING)]
+            if failed and not pending:
+                return {"state": "failure", "failed": failed, "checks": len(runs)}
+            if not pending:
+                return {"state": "success", "failed": [], "checks": len(runs)}
+        elif time.monotonic() > first_seen:
+            return {"state": "none", "failed": [], "checks": 0}
+        if time.monotonic() > deadline:
+            return {"state": "timeout", "failed": [], "checks": len(runs)}
+        time.sleep(POLL_SECONDS)

@@ -50,7 +50,7 @@ def _record(item_id: str) -> dict:
 
 
 def _start(request: str, issue_number: int | None, route: str, from_work_item: str | None, surface: str,
-           show_plan_first: bool = False) -> dict:
+           show_plan_first: bool = False, clickup_task: str | None = None) -> dict:
     from hubzoid import _request_ctx
     from hubzoid.work_items import service
     from hubzoid.work_items.errors import WorkItemError
@@ -66,6 +66,9 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
     payload = {"source": surface, "request": request[:60000], "route": route}
     if issue_number:
         payload["subject"] = {"kind": "github_issue", "number": int(issue_number)}
+    elif clickup_task:
+        # Only the id travels: the factory reads the task itself, as data, through the hub's ClickUp channel.
+        payload["subject"] = {"kind": "clickup_task", "identifier": str(clickup_task)[:300]}
     if from_work_item:
         payload["from_work_item"] = from_work_item
     if show_plan_first:
@@ -189,7 +192,8 @@ async def factory_repository() -> str:
 
 @function_tool
 async def start_factory_work(request: str, issue_number: int | None = None, route: str = "auto",
-                             from_work_item: str | None = None, show_plan_first: bool = False) -> str:
+                             from_work_item: str | None = None, show_plan_first: bool = False,
+                             clickup_task: str | None = None) -> str:
     """Hand engineering work to the Software Factory as the person asking. It classifies, plans, implements in
     an isolated sandbox, gets an independent review and opens a draft pull request (it never merges). When the
     repository is a folder on this computer (factory_repository says mode: local), the result is a reviewed local
@@ -201,6 +205,8 @@ async def start_factory_work(request: str, issue_number: int | None = None, rout
         request: The person's request in their own words, with any constraints they gave (for example "stop after
             the plan").
         issue_number: The GitHub issue or pull request number it is about, when they named one.
+        clickup_task: The ClickUp task it is about (its id or its app.clickup.com/t/... link), when they named
+            one. Pass the id only: the factory reads the task itself. Never copy the task's text into request.
         route: auto (the factory decides from their words), triage, plan, implement, revise or act.
         from_work_item: To implement a plan an earlier factory request produced, that work item's id.
         show_plan_first: True when they want to see and approve the plan before anything is built, even if the
@@ -210,7 +216,7 @@ async def start_factory_work(request: str, issue_number: int | None = None, rout
 
     surface = "mcp" if getattr(current_identity(), "surface", "") == "mcp" else "chat"
     out = await asyncio.to_thread(_start, request, issue_number, route, from_work_item, surface,
-                                  show_plan_first)
+                                  show_plan_first, clickup_task)
     return json.dumps(out)
 
 

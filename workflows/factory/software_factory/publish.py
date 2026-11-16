@@ -46,8 +46,10 @@ class Published:
         return asdict(self)
 
 
-def branch_name(prefix: str, *, kind: str, summary: str, number: int | None, item_id: str) -> str:
-    """`factory/12-bug-fix-the-total-1a2b3c` for an issue, `factory/bug-fix-the-total-1a2b3c` otherwise.
+def branch_name(prefix: str, *, kind: str, summary: str, number: int | None, item_id: str,
+                ticket: str | None = None) -> str:
+    """`factory/12-bug-fix-the-total-1a2b3c` for an issue, `factory/CU-86abc-bug-fix-the-total-1a2b3c` for a
+    ClickUp task, `factory/bug-fix-the-total-1a2b3c` otherwise.
     Decided by code from the saved classification, never by a model. The work
     item's short id keeps a new request for the same issue (a re-label after a
     stopped run) off the earlier work's branch."""
@@ -57,6 +59,9 @@ def branch_name(prefix: str, *, kind: str, summary: str, number: int | None, ite
     short = item_id.replace("-", "")[:6]
     if number:
         return f"{prefix}{number}-{kind}-{slug}-{short}"
+    tid = re.sub(r"[^A-Za-z0-9]+", "", ticket or "")[:24]
+    if tid:
+        return f"{prefix}CU-{tid}-{kind}-{slug}-{short}"
     return f"{prefix}{kind}-{slug}-{short}"
 
 
