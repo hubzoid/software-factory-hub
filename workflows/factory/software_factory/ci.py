@@ -301,8 +301,9 @@ def wait_before_pr(repository_id: int, head_sha: str, *, minutes: int) -> dict:
         time.sleep(POLL_SECONDS)
 
 
-def _all_check_runs(repository_id: int, head_sha: str, *, max_pages: int = 10) -> list[dict]:
-    """Every check run on the commit, all pages: a failure on page two counts."""
+def _all_check_runs(repository_id: int, head_sha: str, *, max_pages: int = 50) -> list[dict]:
+    """Every check run on the commit, all pages: a failure on page two counts.
+    More pages than it reads counts as a failed check, never as a pass."""
     out: list[dict] = []
     cursor = None
     for _ in range(max_pages):
@@ -314,5 +315,6 @@ def _all_check_runs(repository_id: int, head_sha: str, *, max_pages: int = 10) -
         out += items if isinstance(items, list) else (items or {}).get("items") or []
         cursor = page.get("next_cursor")
         if not cursor:
-            break
-    return out
+            return out
+    return out + [{"name": f"more than {len(out)} checks (not all read)", "status": "completed",
+                   "conclusion": "failure"}]

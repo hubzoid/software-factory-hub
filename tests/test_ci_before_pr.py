@@ -68,3 +68,11 @@ def test_no_checks_at_all_is_none(monkeypatch, clock):
 def test_all_green(monkeypatch, clock):
     pages(monkeypatch, [run("tests"), run("lint", "skipped")])
     assert ci.wait_before_pr(1, "a" * 40, minutes=5) == {"state": "success", "failed": [], "checks": 2}
+
+
+def test_checks_beyond_the_pages_read_never_pass(monkeypatch, clock):
+    from software_factory import ci as ci_mod
+
+    pages(monkeypatch, *([[run(f"ok-{i}") for i in range(100)]] * 60))
+    out = ci_mod.wait_before_pr(1, "a" * 40, minutes=1)
+    assert out["state"] == "failure" and "not all read" in out["failed"][0]
