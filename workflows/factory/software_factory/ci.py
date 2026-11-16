@@ -284,12 +284,11 @@ def wait_before_pr(repository_id: int, head_sha: str, *, minutes: int) -> dict:
     deadline = time.monotonic() + max(1, minutes) * 60
     first_seen = time.monotonic() + NO_CHECKS_GRACE_SECONDS
     while True:
-        runs = github.read("listCheckRuns", repository_id=repository_id, head_sha=head_sha, page_size=100)["data"]
-        runs = runs if isinstance(runs, list) else (runs or {}).get("items") or []
+        runs = _all_check_runs(repository_id, head_sha)
+        failed = [r.get("name") or "check" for r in runs
+                  if (r.get("status") == "completed" and (r.get("conclusion") or "") not in PASSING)]
         if runs:
             pending = [r for r in runs if (r.get("status") or "") != "completed"]
-            failed = [r.get("name") or "check" for r in runs
-                      if (r.get("status") == "completed" and (r.get("conclusion") or "") not in PASSING)]
             if failed and not pending:
                 return {"state": "failure", "failed": failed, "checks": len(runs)}
             if not pending:
@@ -297,5 +296,23 @@ def wait_before_pr(repository_id: int, head_sha: str, *, minutes: int) -> dict:
         elif time.monotonic() > first_seen:
             return {"state": "none", "failed": [], "checks": 0}
         if time.monotonic() > deadline:
-            return {"state": "timeout", "failed": [], "checks": len(runs)}
+            # A check that already failed blocks the pull request, even while others still run.
+            return {"state": "failure" if failed else "timeout", "failed": failed, "checks": len(runs)}
         time.sleep(POLL_SECONDS)
+
+
+def _all_check_runs(repository_id: int, head_sha: str, *, max_pages: int = 10) -> list[dict]:
+    """Every check run on the commit, all pages: a failure on page two counts."""
+    out: list[dict] = []
+    cursor = None
+    for _ in range(max_pages):
+        args = {"repository_id": repository_id, "head_sha": head_sha, "page_size": 100}
+        if cursor:
+            args["cursor"] = cursor
+        page = github.read("listCheckRuns", **args)
+        items = page.get("data")
+        out += items if isinstance(items, list) else (items or {}).get("items") or []
+        cursor = page.get("next_cursor")
+        if not cursor:
+            break
+    return out

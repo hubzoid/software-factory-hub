@@ -147,17 +147,19 @@ def test_a_clickup_task_ships_a_draft_pr_named_and_linked_to_it(factory, clickup
     assert clickup.statuses[-1] == "in review"
 
 
-def test_a_clickup_task_named_in_chat_is_read_through_the_channel(factory, clickup):
+def test_a_clickup_task_named_in_chat_is_read_through_the_channel_and_linked(factory, clickup):
     from hubzoid.work_items import service as wi
 
     item, _ = wi.admit(factory.hub_dir, workflow="factory", key="chat:cu", route="request",
                        input={"source": "chat", "request": "Fix this task",
                               "subject": {"kind": "clickup_task", "identifier": "https://app.clickup.com/t/86abc"}},
                        requester=h.OWNER, origin={"source": "chat", "surface": "web"})
-    factory.model.route = dict(factory.model.route, route="plan")
     out = factory.run(item)
-    assert outcome(out) == ("planned", None)
+    assert outcome(out) == ("review_ready", None)
     assert "Totals are off by one" in factory.stations.calls[0]["message"]
+    rec = out["factory_v1"]
+    assert rec["branch"].startswith("factory/CU-86abc-")
+    assert "ClickUp task: https://app.clickup.com/t/86abc" in factory.api.pulls[rec["pr_number"]]["body"]
 
 
 # -- the repository's checks before the pull request -------------------------------------------------
