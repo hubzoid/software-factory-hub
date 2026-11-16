@@ -182,7 +182,7 @@ def _repository() -> dict:
             "label": values.get("FACTORY_LABEL"), "branch_prefix": values.get("FACTORY_BRANCH_PREFIX")}
 
 
-@function_tool
+@function_tool(strict_mode=False)
 async def factory_repository() -> str:
     """The repository the factory works on and its numeric repository_id. Call it once before the GitHub read
     tools (github__getFileContent, github__searchCode and the rest), which all take that repository_id. When it
@@ -190,7 +190,7 @@ async def factory_repository() -> str:
     return json.dumps(await asyncio.to_thread(_repository))
 
 
-@function_tool
+@function_tool(strict_mode=False)
 async def start_factory_work(request: str, issue_number: int | None = None, route: str = "auto",
                              from_work_item: str | None = None, show_plan_first: bool = False,
                              clickup_task: str | None = None) -> str:
@@ -220,7 +220,7 @@ async def start_factory_work(request: str, issue_number: int | None = None, rout
     return json.dumps(out)
 
 
-@function_tool
+@function_tool(strict_mode=False)
 async def factory_status(work_item: str) -> str:
     """Where one factory work item stands: its stage, what it is waiting for, the plan, the branch and the
     draft pull request, or why it stopped. Only the person who asked (or a manager) sees the details.
@@ -231,7 +231,7 @@ async def factory_status(work_item: str) -> str:
     return json.dumps(await asyncio.to_thread(_status, work_item), default=str)
 
 
-@function_tool
+@function_tool(strict_mode=False)
 async def list_factory_work(limit: int = 10) -> str:
     """The person's own recent factory work items, newest first.
 

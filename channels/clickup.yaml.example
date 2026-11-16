@@ -4,7 +4,7 @@ version: 1
 # task. Rename to clickup.yaml, replace the placeholder ids with your workspace's, then:
 #   hubzoid channels apply . --file channels/clickup.yaml --expected-revision absent
 #   # a person stores the ClickUp API token (pk_..., Settings, Apps), never in chat:
-#   hubzoid secrets set . --ref secret:channel/software-factory/clickup/token --stdin --apply
+#   hubzoid secrets set . --ref secret:channel/software-factory/clickup/token --stdin
 #   hubzoid channels clickup setup . clickup          # one webhook per list (needs HUBZOID_PUBLIC_URL)
 #   hubzoid channels clickup members . clickup        # ClickUp user ids
 #   hubzoid channels link . clickup --external-id <clickup-user-id> --account <email>
