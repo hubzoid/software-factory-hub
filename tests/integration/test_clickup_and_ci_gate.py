@@ -129,12 +129,16 @@ def task_ready(factory, fake, *, hid="h1") -> dict:
 
 # -- ClickUp --------------------------------------------------------------------------------------
 
-def test_a_clickup_task_plans_on_the_same_task_with_its_text_as_data(factory, clickup):
+def test_a_clickup_task_always_builds_with_its_text_as_data(factory, clickup):
     item = task_ready(factory, clickup)
     assert item["requester"] == h.OWNER
-    factory.model.route = dict(factory.model.route, route="plan")
+    # A task in the queue is the request to build: no model picks answer or plan for it.
+    factory.model.route = dict(factory.model.route, route="answer",
+                               clarify="What would you like done with the ClickUp task?")
     out = factory.run(item)
-    assert outcome(out) == ("planned", None)
+    assert outcome(out) == ("review_ready", None)
+    assert out["factory_v1"]["route"] == "implement"
+    assert not any("What would you like done" in c for c in clickup.comments)
     assert clickup.comments and all("(ref hz-" in c for c in clickup.comments)
     assert "in progress" in clickup.statuses
     classifier = factory.stations.calls[0]["message"]

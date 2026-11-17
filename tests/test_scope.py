@@ -33,6 +33,14 @@ def test_fixed_routes():
     assert scope.fixed_route("implement") == "implement"
 
 
+def test_a_clickup_task_in_the_queue_is_a_request_to_build():
+    from types import SimpleNamespace as NS
+
+    assert scope.fixed_route("request", NS(source="clickup", trigger="task_ready")) == "implement"
+    assert scope.fixed_route("request", NS(source="clickup", trigger="comment")) is None
+    assert scope.fixed_route("request", NS(source="linear", trigger="task_ready")) is None
+
+
 def test_factory_errors_survive_the_engine_storing_them():
     import pickle
 

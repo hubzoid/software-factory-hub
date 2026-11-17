@@ -56,9 +56,20 @@ class ScopeDecision(BaseModel):
     reason: str = ""
 
 
-def fixed_route(item_route: str) -> str | None:
+#: Triggers that are themselves the request to build. A task placed in the
+#: factory's ClickUp queue asks for the change and a draft pull request, so no
+#: model chooses between answering, triaging or planning it. Questions about
+#: what to build are still asked, before the plan (classify).
+BUILD_TRIGGERS = {("clickup", "task_ready"): "implement"}
+
+
+def fixed_route(item_route: str, request=None) -> str | None:
     """A route the trigger or the API caller already fixed."""
-    return None if item_route == "request" else item_route
+    if item_route != "request":
+        return item_route
+    if request is not None:
+        return BUILD_TRIGGERS.get((request.source, request.trigger))
+    return None
 
 
 def check(decision: ScopeDecision, *, caller: str, trigger: str | None) -> ScopeDecision:

@@ -159,7 +159,8 @@ def _scope(r: Run) -> None:
                                "so the factory does not act on it.")
     # The ceiling is saved with the stage: a resumed execution sees the item
     # already narrowed, and must still replay the same steps.
-    base = item.checkpoint(routes.SCOPE, lambda: {"settings": _settings_now(), "fixed": scope.fixed_route(item.route),
+    base = item.checkpoint(routes.SCOPE, lambda: {"settings": _settings_now(),
+                                                  "fixed": scope.fixed_route(item.route, r.request),
                                                   "ceiling": item.route})
     r.settings = base["settings"]
     if not r.settings["FACTORY_INTAKE_ENABLED"]:
