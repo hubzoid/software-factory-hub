@@ -725,6 +725,12 @@ def _ask_plan_approval(version: int, analysis: dict, path: Path, public: str | N
     the decision (ClickUp with approve_in_task), the plan is attached and the
     reply decides it. Elsewhere it is decided in Hubzoid."""
     size = f"{len(analysis['plan'])} steps, {len(analysis['acceptance_criteria'])} acceptance criteria"
+    legacy = (f"Plan v{version} is ready: {size}. Approve it in your Inbox in Hubzoid"
+              + (f": {public}" if public else "") + ".")
+    if progress.posted(f"plan-wait:{version}", kind="question"):
+        # Work that announced this plan before the upgrade keeps that post.
+        progress.reply(legacy, key=f"plan-wait:{version}", kind="question")
+        return
     here = progress.approvals_here()
     attached = progress.attachments()
     if here:
@@ -741,8 +747,7 @@ def _ask_plan_approval(version: int, analysis: dict, path: Path, public: str | N
     except Exception as exc:  # noqa: BLE001 - a run that already posted keeps its own wording
         if "conflict" not in str(getattr(exc, "code", "") or exc) and not isinstance(exc, (ValueError, TypeError)):
             raise
-        progress.reply(f"Plan v{version} is ready: {size}. Approve it in your Inbox in Hubzoid"
-                       + (f": {public}" if public else "") + ".", key=f"plan-wait:{version}", kind="question")
+        progress.reply(legacy, key=f"plan-wait:{version}", kind="question")
 
 
 def _context_current(r: Run, *, observed: str | None = None, pushed_branch: str | None = None) -> None:

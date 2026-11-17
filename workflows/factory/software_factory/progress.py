@@ -63,6 +63,15 @@ def reply(text: str, *, key: str, kind: str = "result", files=None) -> bool:
     return True
 
 
+def posted(key: str, *, kind: str) -> bool:
+    """Whether this work already posted under `key` and `kind` (older
+    Hubzoid: unknown, so False)."""
+    if not thread_available():
+        return False
+    check = getattr(hub.thread, "posted", None)
+    return bool(check(key, kind=kind)) if check else False
+
+
 def approvals_here() -> bool:
     """Whether the requester can approve the plan by replying in this thread."""
     return thread_available() and bool(getattr(hub.thread, "approvals_here", False))

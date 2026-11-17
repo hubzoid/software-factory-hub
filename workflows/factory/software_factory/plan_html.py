@@ -1,15 +1,35 @@
 """The plan as one clean HTML page (FACTORY_PLAN_FORMAT: html).
 
 Markdown is rendered with raw HTML turned off: the plan quotes the request,
-which is untrusted, so any HTML in it shows as text and never runs. No
-scripts, no external fonts or styles: the page opens the same from a ClickUp
-attachment, an email or a laptop.
+which is untrusted, so any HTML in it shows as text and never runs. Links
+keep only http, https and mailto addresses, and the page's policy allows no
+script at all. No external fonts or styles: the page opens the same from a
+ClickUp attachment, an email or a laptop.
 """
 from __future__ import annotations
 
 import html
+from urllib.parse import urlparse
 
 import markdown
+from markdown.treeprocessors import Treeprocessor
+
+SAFE_SCHEMES = {"http", "https", "mailto"}
+CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'"
+
+
+class _SafeLinks(Treeprocessor):
+    def run(self, root):
+        for el in root.iter():
+            for attr in ("href", "src"):
+                value = el.get(attr)
+                if value is None:
+                    continue
+                scheme = urlparse(value.strip()).scheme.lower()
+                if scheme and scheme not in SAFE_SCHEMES:
+                    del el.attrib[attr]
+                elif not scheme and attr == "src":
+                    del el.attrib[attr]
 
 STYLE = """
 body{font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#1f2328;
@@ -28,7 +48,9 @@ def render(title: str, text: str) -> str:
     md = markdown.Markdown(extensions=["tables", "fenced_code", "sane_lists"])
     md.preprocessors.deregister("html_block")
     md.inlinePatterns.deregister("html")
+    md.treeprocessors.register(_SafeLinks(md), "safe_links", 0)
     body = md.convert(text)
     return (f"<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">"
+            f"<meta http-equiv=\"Content-Security-Policy\" content=\"{CSP}\">"
             f"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
             f"<title>{html.escape(title)}</title><style>{STYLE}</style></head>\n<body>\n{body}\n</body></html>\n")

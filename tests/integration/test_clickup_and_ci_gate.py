@@ -166,6 +166,17 @@ def test_the_plan_is_attached_as_markdown_and_the_comment_says_what_to_reply(fac
     assert clickup.statuses.index("needs approval") < clickup.statuses.index("in review")
 
 
+def test_work_that_announced_its_plan_before_the_upgrade_keeps_that_post(factory, clickup, monkeypatch):
+    from software_factory import progress
+
+    monkeypatch.setattr(progress, "posted", lambda key, kind: key.startswith("plan-wait:") and kind == "question")
+    out = factory.run(task_ready(factory, clickup))
+    assert outcome(out) == ("review_ready", None)
+    assert clickup.attachments == {}
+    assert any("Approve it in your Inbox in Hubzoid" in c for c in clickup.comments)
+    assert not any("ready for your approval" in c for c in clickup.comments)
+
+
 def test_the_plan_can_be_one_html_page(factory, clickup):
     set_values(factory, ["chat", "mcp", "github", "clickup"], FACTORY_CLICKUP_CONNECTION="clickup",
                FACTORY_PLAN_FORMAT="html")
