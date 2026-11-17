@@ -50,12 +50,36 @@ def stage(name: str, note: str, *, post: bool = True, public: str | None = None)
         hub.thread.post(text, key=f"progress:{name}:{digest}", kind="progress")
 
 
-def reply(text: str, *, key: str, kind: str = "result") -> bool:
-    """Post to the work's own thread when it has one. Returns whether it did."""
+def reply(text: str, *, key: str, kind: str = "result", files=None) -> bool:
+    """Post to the work's own thread when it has one. Returns whether it did.
+    `files` and kind "approval" need Hubzoid with plan approvals in threads;
+    an older SDK refuses them (ValueError, TypeError) and the caller falls back."""
     if not thread_available():
         return False
-    hub.thread.post(text, key=key, kind=kind)
+    if files:
+        hub.thread.post(text, key=key, kind=kind, files=[str(f) for f in files])
+    else:
+        hub.thread.post(text, key=key, kind=kind)
     return True
+
+
+def posted(key: str, *, kind: str) -> bool:
+    """Whether this work already posted under `key` and `kind` (older
+    Hubzoid: unknown, so False)."""
+    if not thread_available():
+        return False
+    check = getattr(hub.thread, "posted", None)
+    return bool(check(key, kind=kind)) if check else False
+
+
+def approvals_here() -> bool:
+    """Whether the requester can approve the plan by replying in this thread."""
+    return thread_available() and bool(getattr(hub.thread, "approvals_here", False))
+
+
+def attachments() -> bool:
+    """Whether a file posted to this thread is attached."""
+    return thread_available() and bool(getattr(hub.thread, "attachments", False))
 
 
 def read(item_id: str) -> dict:

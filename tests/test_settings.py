@@ -21,8 +21,10 @@ BAD = [
     ("FACTORY_GITHUB_CONNECTION", "GitHub"),
     ("FACTORY_LINEAR_CONNECTION", "has space"),
     ("FACTORY_SLACK_CONNECTION", "UPPER"),
-    ("FACTORY_CHANNELS", ["chat", "clickup"]),
+    ("FACTORY_CHANNELS", ["chat", "jira"]),
     ("FACTORY_CHANNELS", ["email"]),
+    ("FACTORY_CLICKUP_CONNECTION", "Has Space"),
+    ("FACTORY_CI_WAIT_MINUTES", 0),
     ("FACTORY_INTAKE_ENABLED", "sometimes"),
     ("FACTORY_REQUIRE_PLAN_APPROVAL", "maybe"),
     ("FACTORY_REVIEW_CYCLES", 3),
@@ -59,8 +61,8 @@ def test_repository_is_required():
     assert any(p.key == "FACTORY_REPO" for p in found)
 
 
-def test_unknown_keys_and_clickup_are_refused():
-    assert any(p.code == "setting_unknown" for p in problems({**GOOD, "FACTORY_CLICKUP_CONNECTION": "x"}))
+def test_unknown_keys_are_refused_and_clickup_is_known():
+    assert not problems({**GOOD, "FACTORY_CLICKUP_CONNECTION": "clickup", "FACTORY_CI_BEFORE_PR": True})
     assert any(p.code == "setting_unknown" for p in problems({**GOOD, "FACTORY_SETUP_COMMAND": "npm ci"}))
 
 

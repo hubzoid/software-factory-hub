@@ -83,9 +83,9 @@ def test_token_mode_says_whether_deliveries_are_verified(factory_hub, conn, webh
     assert row["card"]["detail"] == "GitHub issues come in by asking in chat"
 
 
-def test_channels_row_names_no_unsupported_tracker(factory_hub, conn):
+def test_channels_row_names_the_built_in_trackers(factory_hub, conn):
     row = _checks().channels(_context(factory_hub))
-    assert row["status"] == "ok" and "ClickUp" not in row["summary"]
+    assert row["status"] == "ok" and "ClickUp and Linear are built in" in row["summary"]
     assert row["card"] == {"line": "Chat, MCP and GitHub", "detail": "GitHub issues labelled factory start work"}
 
 

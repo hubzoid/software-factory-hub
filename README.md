@@ -105,6 +105,7 @@ The [builder skill](skills/setup-software-factory/SKILL.md) holds the same steps
 |---|---|
 | GitHub | Label an issue `factory` and it runs on its own, posting progress on the issue. Mention it (`@your-app plan this`) to ask, triage, plan or implement. It repairs failing CI on its own branches, at most twice, and posts one orientation comment on each new pull request. |
 | Linear | Assign it a task. The plan comes back for you to approve in your Hubzoid **Inbox**. |
+| ClickUp | Move a task to "ready for agent". Questions come back as task comments in plain words, your reply answers them, and the draft pull request is linked on the task. |
 | The web chat and Slack | Ask for work or its status. Plans wait for your approval in the **Inbox**. |
 | Claude Code, ChatGPT and Codex, over MCP | The same requests from your own assistant, with the plan waiting for your approval. |
 | Another tracker | Ask in chat, and the factory pulls the issue in through that tracker's MCP server. |
@@ -127,7 +128,7 @@ software-factory/
 ├── knowledge/factory-brain/         durable facts about each repository, one file per owner-repo (local-folder-hash in local mode)
 ├── hub.settings.yaml                FACTORY_REPO, channels, whether plans need approval
 ├── sandboxes/factory.yaml           the Docker sandbox and its reviewed setup command (FACTORY_LOCAL_SETUP without Docker)
-└── channels/                        the GitHub, Linear and Slack connections
+└── channels/                        the GitHub, Linear, ClickUp and Slack connections
 ```
 
 Each station is one page of instructions. Edit it in your checkout and review the change like any commit.
@@ -176,7 +177,7 @@ Grant teammates access to the hub and to `wf_factory`. Linked GitHub, Slack and 
 |---|---|
 | Install, connect GitHub and get a first result | [Setup](SETUP.md) |
 | Every setting and its check | [Settings](docs/settings.md) |
-| Connect GitHub, Linear and Slack | [Channels](docs/channels.md) |
+| Connect GitHub, Linear, ClickUp and Slack | [Channels](docs/channels.md) |
 | How routes, stations and publishing fit together | [Architecture](docs/architecture.md) |
 | Run it, back it up and upgrade it | [Operations](docs/operations.md) |
 | Fix a failed station, intake or webhook | [Troubleshooting](docs/troubleshooting.md) |

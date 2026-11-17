@@ -21,7 +21,8 @@ LOCAL = {"analyst": "local-analyst", "implementer": "local-implementer", "review
 BUILDS = "Plans and builds run in Docker"
 LOCAL_LINE = "Builds run locally"
 LOCAL_BUILDS = "Confined, offline, no credentials"
-CHANNEL_NAMES = {"chat": "Chat", "mcp": "MCP", "github": "GitHub", "linear": "Linear", "slack": "Slack"}
+CHANNEL_NAMES = {"chat": "Chat", "mcp": "MCP", "github": "GitHub", "linear": "Linear", "clickup": "ClickUp",
+                 "slack": "Slack"}
 WANT_ROUTES = {"mention": "request", "review_mention": "request", "label": "implement", "pull_request": "summarize",
                "ci_failure": "revise"}
 #: How the SDK reads an on/off switch (hubzoid/workflows/boot.py, `_truthy`).
@@ -99,6 +100,8 @@ def settings(context) -> dict:
         problems.append("linear is in FACTORY_CHANNELS but FACTORY_LINEAR_CONNECTION is empty")
     if "slack" in channels and not s.get("FACTORY_SLACK_CONNECTION"):
         problems.append("slack is in FACTORY_CHANNELS but FACTORY_SLACK_CONNECTION is empty")
+    if "clickup" in channels and not s.get("FACTORY_CLICKUP_CONNECTION"):
+        problems.append("clickup is in FACTORY_CHANNELS but FACTORY_CLICKUP_CONNECTION is empty")
     if "github" not in channels and not ({"chat", "mcp"} & set(channels)):
         problems.append("FACTORY_CHANNELS has no way to ask the factory for work")
     if not s.get("FACTORY_INTAKE_ENABLED", True):
@@ -357,7 +360,8 @@ def channels(context) -> dict:
         from hubzoid.channels import config
     except Exception:  # noqa: BLE001
         return _row("warn", "Channels are not available in this Hubzoid install.")
-    for name, key in (("linear", "FACTORY_LINEAR_CONNECTION"), ("slack", "FACTORY_SLACK_CONNECTION")):
+    for name, key in (("linear", "FACTORY_LINEAR_CONNECTION"), ("slack", "FACTORY_SLACK_CONNECTION"),
+                      ("clickup", "FACTORY_CLICKUP_CONNECTION")):
         if name not in listed:
             continue
         cid = s.get(key)
@@ -392,8 +396,9 @@ def channels(context) -> dict:
         return _row("ok", f"Requests come from {enabled}. The github channel is not used while FACTORY_REPO is a "
                           "folder on this computer: ask in chat or through MCP.",
                     "To tidy it, set FACTORY_CHANNELS to [chat, mcp].", card=card)
-    return _row("ok", f"Requests come from {enabled}. Other trackers are not built in: a chat request can pull an "
-                      "issue in through that tracker's MCP server when one is connected.", card=card)
+    return _row("ok", f"Requests come from {enabled}. ClickUp and Linear are built in (FACTORY_CHANNELS); for "
+                      "another tracker, a chat request can pull an issue in through that tracker's MCP server.",
+                card=card)
 
 
 def _github_requests(hub_dir: Path, s: dict, config) -> str:

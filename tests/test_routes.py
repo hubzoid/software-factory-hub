@@ -43,3 +43,13 @@ def test_unattended_never_widens():
     assert "implement" in policy.route_ceiling("A", "label")
     assert "implement" not in policy.route_ceiling("A", "mention")
     assert "act" not in policy.route_ceiling("A", "label")
+
+
+def test_branch_names_carry_the_clickup_task_id():
+    from software_factory import publish
+
+    name = publish.branch_name("factory/", kind="bug", summary="Totals are off", number=None, item_id="abcdef12",
+                               ticket="86abc")
+    assert name.startswith("factory/CU-86abc-bug-totals-are-off-")
+    assert publish.branch_name("factory/", kind="bug", summary="x", number=12, item_id="abc",
+                               ticket="86abc").startswith("factory/12-")

@@ -50,7 +50,7 @@ def digest(text: str) -> str:
 
 def pr_body(*, analysis: Analysis, implementation: Implementation, review: Review, subject_kind: str,
             subject_number: int | None, evidence_url: str | None, cautions: list[str], pushed_sha: str,
-            plan_digest: str | None) -> str:
+            plan_digest: str | None, subject_url: str | None = None, subject_id: str | None = None) -> str:
     results = {r.criterion.strip(): r for r in review.criteria_results}
     lines = ["## Problem", "", analysis.problem_statement, "", "## Approach", "", analysis.approach, "",
              "## Acceptance criteria", ""]
@@ -77,6 +77,8 @@ def pr_body(*, analysis: Analysis, implementation: Implementation, review: Revie
               + " This is a draft: a person reviews it, marks it ready and merges."]
     if subject_kind == "github_issue" and subject_number:
         lines += ["", f"Closes #{subject_number}"]
+    if subject_kind == "clickup_task" and (subject_url or subject_id):
+        lines += ["", f"ClickUp task: {subject_url or ''}" + (f" (CU-{subject_id})" if subject_id else "")]
     body = "\n".join(lines)
     return body[:MAX_BODY]
 

@@ -38,8 +38,10 @@ class Classification(_Closed):
     actionable: bool = Field(description="Whether the request has enough information to act on.")
     needs_clarification: bool = Field(description="True when the request is ambiguous, contradictory or missing "
                                                   "essentials. The questions go in questions.")
-    questions: list[str] = Field(description="Specific clarifying questions. Empty unless needs_clarification "
-                                             "is true.")
+    questions: list[str] = Field(description=(
+        "At most 3 clarifying questions, decisions first, each one short sentence a non-technical person can "
+        "answer, in plain words (no file names, code or engineering terms), ending with 2 or 3 suggested "
+        "answers as '(a) ... (b) ...', the recommended one first. Empty unless needs_clarification is true."))
     summary: str = Field(description="One-sentence restatement of the work item.")
 
 

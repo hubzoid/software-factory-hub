@@ -261,3 +261,67 @@ def _revision_of(repo) -> str:
     from . import brain
 
     return brain.revision(context._ctx().hub_dir, repo.full_name)
+
+
+# -- CI before the pull request ------------------------------------------------------------
+
+#: check conclusions that count as passing; anything else that finished is a failure
+PASSING = ("success", "neutral", "skipped")
+#: how long a commit may have no checks at all before "this repository runs no CI on a push"
+NO_CHECKS_GRACE_SECONDS = 120
+POLL_SECONDS = 20
+
+
+def wait_before_pr(repository_id: int, head_sha: str, *, minutes: int) -> dict:
+    """Wait for the repository's own checks on the pushed commit, before any
+    pull request exists (VisionForge Foreman's gate, with the repository's CI
+    as the runner: the factory, not a model, decides from the checks' own
+    conclusions). Returns ``{"state": "success" | "failure" | "none" |
+    "timeout", "failed": [names], "checks": n}``. "none" means no check started
+    for this commit within two minutes: the repository runs no CI on a push."""
+    import time
+
+    deadline = time.monotonic() + max(1, minutes) * 60
+    first_seen = time.monotonic() + NO_CHECKS_GRACE_SECONDS
+    while True:
+        runs = _all_check_runs(repository_id, head_sha)
+        failed = [r.get("name") or "check" for r in runs
+                  if (r.get("status") == "completed" and (r.get("conclusion") or "") not in PASSING)]
+        if runs:
+            pending = [r for r in runs if (r.get("status") or "") != "completed"]
+            if failed and not pending:
+                return {"state": "failure", "failed": failed, "checks": len(runs)}
+            if not pending:
+                return {"state": "success", "failed": [], "checks": len(runs)}
+        elif time.monotonic() > first_seen:
+            return {"state": "none", "failed": [], "checks": 0}
+        if time.monotonic() > deadline:
+            # A check that already failed blocks the pull request, even while others still run.
+            return {"state": "failure" if failed else "timeout", "failed": failed, "checks": len(runs)}
+        time.sleep(POLL_SECONDS)
+
+
+def failed_on(repository_id: int, sha: str) -> list[str]:
+    """The checks that finished failing on a commit (the base, to tell a
+    failure the change caused from one that was already there)."""
+    return sorted({r.get("name") or "check" for r in _all_check_runs(repository_id, sha)
+                   if r.get("status") == "completed" and (r.get("conclusion") or "") not in PASSING})
+
+
+def _all_check_runs(repository_id: int, head_sha: str, *, max_pages: int = 50) -> list[dict]:
+    """Every check run on the commit, all pages: a failure on page two counts.
+    More pages than it reads counts as a failed check, never as a pass."""
+    out: list[dict] = []
+    cursor = None
+    for _ in range(max_pages):
+        args = {"repository_id": repository_id, "head_sha": head_sha, "page_size": 100}
+        if cursor:
+            args["cursor"] = cursor
+        page = github.read("listCheckRuns", **args)
+        items = page.get("data")
+        out += items if isinstance(items, list) else (items or {}).get("items") or []
+        cursor = page.get("next_cursor")
+        if not cursor:
+            return out
+    return out + [{"name": f"more than {len(out)} checks (not all read)", "status": "completed",
+                   "conclusion": "failure"}]
