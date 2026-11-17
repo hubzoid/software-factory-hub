@@ -120,6 +120,9 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
     """Check and publish one implementer call's commits to `branch`."""
     data, digest, base_sha = _export(call_id)
     checked = scan.check(data)
+    if checked.refusals == [scan.NOTHING_COMMITTED]:
+        raise FactoryStop("nothing_committed", "The implementer made no change on this revision.",
+                          details=checked.to_json())
     if not checked.ok:
         raise FactoryStop("patch_refused", "The change was not published: " + "; ".join(checked.refusals),
                           details=checked.to_json())

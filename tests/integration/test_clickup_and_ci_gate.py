@@ -232,6 +232,28 @@ def test_red_checks_go_back_to_the_implementer_and_no_pr_opens(factory, quick_ch
     assert len(implementers) == 3 and "checks fail on the pushed commit" in implementers[1]["message"]
 
 
+def test_checks_that_already_fail_on_the_base_do_not_block_the_draft(factory, quick_checks):
+    set_values(factory, ["chat", "mcp", "github"], FACTORY_CI_BEFORE_PR="true")
+    factory.api.failing_jobs = [{"name": "tests", "conclusion": "failure"}]
+    factory.api.base_jobs = [{"name": "tests", "conclusion": "failure"}]
+    out = factory.run(factory.label())
+    assert outcome(out) == ("review_ready", None)
+    implementers = [c for c in factory.stations.calls if c["name"] == "implementer"]
+    assert len(implementers) == 1                                    # no revision for a failure it did not cause
+    pr = factory.api.pulls[out["factory_v1"]["pr_number"]]
+    assert "already fail on the base commit" in pr["body"] and "tests" in pr["body"]
+
+
+def test_a_new_failing_check_still_blocks_when_another_was_already_red(factory, quick_checks):
+    set_values(factory, ["chat", "mcp", "github"], FACTORY_CI_BEFORE_PR="true")
+    factory.stations.verdicts = ["approve"] * 5
+    factory.api.failing_jobs = [{"name": "tests", "conclusion": "failure"}, {"name": "lint", "conclusion": "failure"}]
+    factory.api.base_jobs = [{"name": "tests", "conclusion": "failure"}]
+    out = factory.run(factory.label())
+    assert outcome(out) == ("stopped", "ci_failed_before_pr")
+    assert factory.api.pulls == {}
+
+
 def test_no_ci_on_push_opens_the_draft_with_a_caution(factory, quick_checks):
     set_values(factory, ["chat", "mcp", "github"], FACTORY_CI_BEFORE_PR="true")
     factory.api.failing_jobs = []

@@ -133,6 +133,7 @@ class FakeGitHub:
         self.pulls: dict[int, dict] = {}
         self.permission = "write"
         self.failing_jobs = [{"name": "tests", "conclusion": "failure"}]
+        self.base_jobs: list[dict] = []          # the checks on main's head (green unless a test says)
         self.next = 100
 
     def _pr_json(self, n):
@@ -222,10 +223,11 @@ class FakeGitHub:
                                  "changes": 2, "patch": "@@ -1 +1 @@"}] if m.group(2) == "files" else [])
         m = re.fullmatch(rf"/repos/{FULL}/commits/([0-9a-f]+)/check-runs", path)
         if m:
+            jobs = self.base_jobs if m.group(1) == self.remote.head("main") else self.failing_jobs
             return R(200, json={"check_runs": [{"id": 1, "name": j["name"], "conclusion": j["conclusion"],
                                                 "status": j.get("status", "completed"),
                                                 "app": {"slug": "other"}, "output": {"summary": "1 failed"}}
-                                               for j in self.failing_jobs]})
+                                               for j in jobs]})
         if path == "/graphql":
             n = int(body["variables"]["id"].split("_")[1])
             self.pulls[n]["draft"] = "convertPullRequestToDraft" in body["query"]

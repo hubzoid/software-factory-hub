@@ -22,6 +22,9 @@ REASONS = {
                          "from the pushed branch.",
     "patch_refused": "The change touched something the factory never publishes, or looked like it carried a "
                      "credential. Nothing was pushed.",
+    "nothing_committed": "The implementer made no change. After failing checks or review findings this usually "
+                         "means it judged them outside the plan. Read its notes on the work, then fix the checks "
+                         "or ask again with more detail. Nothing new was pushed.",
     "plan_rejected": "The plan was rejected. Ask again with what should change.",
     "plan_changes_requested": "The plan needs changes the factory could not make. Ask again with the notes.",
     "branch_owned_elsewhere": "Another piece of factory work owns that branch.",

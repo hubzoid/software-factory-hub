@@ -39,6 +39,8 @@ _SYMLINK = re.compile(r"^new file mode 120000$|^new mode 120000$", re.M)
 _ESCAPES = {"a": "\a", "b": "\b", "t": "\t", "n": "\n", "v": "\v", "f": "\f", "r": "\r", '"': '"', "\\": "\\"}
 
 
+NOTHING_COMMITTED = "The implementer committed nothing."
+
 def _unquote(token: str) -> str:
     """A path as Git writes it in a patch header: plain, or C-quoted with
     escapes and octal bytes when it holds unusual characters."""
@@ -180,7 +182,7 @@ def _secrets(lines: list[str]) -> list[str]:
 def check(patch: bytes) -> ScanResult:
     result = ScanResult(ok=True, bytes=len(patch))
     if not patch:
-        return ScanResult(ok=False, refusals=["The implementer committed nothing."])
+        return ScanResult(ok=False, refusals=[NOTHING_COMMITTED])
     if len(patch) > MAX_PATCH_BYTES:
         result.refusals.append(f"The patch is {len(patch)} bytes, over the {MAX_PATCH_BYTES} byte limit.")
     text = patch.decode("utf-8", errors="replace")

@@ -895,8 +895,23 @@ def _ci_before_pr(r: Run, head: str, pr_number: int | None) -> dict | None:
     from . import ci
 
     progress.stage(routes.PUBLISH, f"Waiting for the repository's checks on {head[:12]} before the pull request.")
-    gate = hub.work_item.checkpoint(routes.PUBLISH, lambda: ci.wait_before_pr(
-        r.repo.repository_id, head, minutes=int(r.settings.get("FACTORY_CI_WAIT_MINUTES") or 30)))
+    base = r.record.get("base_sha")
+
+    def wait() -> dict:
+        gate = ci.wait_before_pr(r.repo.repository_id, head,
+                                 minutes=int(r.settings.get("FACTORY_CI_WAIT_MINUTES") or 30))
+        if gate["state"] == "failure" and base:
+            # A check that already fails on the base commit is not this change's doing.
+            gate["base_failed"] = ci.failed_on(r.repo.repository_id, base)
+        return gate
+
+    gate = hub.work_item.checkpoint(routes.PUBLISH, wait)
+    if gate["state"] == "failure" and gate.get("base_failed") and set(gate["failed"]) <= set(gate["base_failed"]):
+        gate = {**gate, "state": "already_failing"}
+        r.record.setdefault("cautions", []).append(
+            f"These checks already fail on the base commit {str(base)[:12]}, before this change: "
+            f"{', '.join(gate['failed'])}. The pull request opened anyway. A new failure inside the same check "
+            "would not show here, so read the check's log on this pull request.")
     checks = r.record.setdefault("checks_before_pr", [])
     checks.append({"sha": head, **gate})
     progress.record(checks_before_pr=checks)

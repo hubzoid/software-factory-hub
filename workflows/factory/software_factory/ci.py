@@ -301,6 +301,13 @@ def wait_before_pr(repository_id: int, head_sha: str, *, minutes: int) -> dict:
         time.sleep(POLL_SECONDS)
 
 
+def failed_on(repository_id: int, sha: str) -> list[str]:
+    """The checks that finished failing on a commit (the base, to tell a
+    failure the change caused from one that was already there)."""
+    return sorted({r.get("name") or "check" for r in _all_check_runs(repository_id, sha)
+                   if r.get("status") == "completed" and (r.get("conclusion") or "") not in PASSING})
+
+
 def _all_check_runs(repository_id: int, head_sha: str, *, max_pages: int = 50) -> list[dict]:
     """Every check run on the commit, all pages: a failure on page two counts.
     More pages than it reads counts as a failed check, never as a pass."""

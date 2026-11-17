@@ -24,6 +24,7 @@ Every stop says why and what to do next, on the issue or in `factory_status`. Th
 | `stopped_by_requester` | The requester wrote "stop" | Nothing more runs |
 | `checkout_failed` "could not read Username" | The host has no Git access to a private repository | Give the account running Hubzoid read access to it ([Operations](operations.md), Running), then ask again |
 | `ci_failed_before_pr` | With `FACTORY_CI_BEFORE_PR`, the repository's checks still failed after the allowed revisions | No pull request was opened. A person takes it from the pushed branch |
+| `nothing_committed` | The implementer made no change on a revision, usually because it judged the failing checks or findings outside the plan | Read its notes on the work. Fix the checks, or ask again with more detail |
 | `clickup_unavailable` | A ClickUp task named in chat could not be read through `FACTORY_CLICKUP_CONNECTION` | Connect ClickUp (Channels, ClickUp) and check the task is in a list the channel serves |
 
 Codes from Hubzoid itself:
