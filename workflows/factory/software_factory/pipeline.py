@@ -130,7 +130,7 @@ SNAPSHOT = {"FACTORY_REQUIRE_PLAN_APPROVAL": True, "FACTORY_REVIEW_CYCLES": 2, "
             "FACTORY_CI_BEFORE_PR": False, "FACTORY_CI_WAIT_MINUTES": 30, "FACTORY_CLICKUP_CONNECTION": "",
             "FACTORY_BRANCH_PREFIX": "factory/", "FACTORY_INTAKE_ENABLED": True,
             "FACTORY_CHANNELS": ["chat", "mcp", "github"], "FACTORY_REPO": "", "FACTORY_BUILDS": "auto",
-            "FACTORY_LOCAL_SETUP": "", "FACTORY_SANDBOX_PROFILE": "factory"}
+            "FACTORY_LOCAL_SETUP": "", "FACTORY_SANDBOX_PROFILE": "factory", "FACTORY_PLAN_FORMAT": "markdown"}
 
 
 def _settings_now() -> dict:
@@ -326,13 +326,16 @@ def _clickup_task(r: Run, task_id: str | None) -> dict:
             "url": task.get("url") or f"https://app.clickup.com/t/{task.get('id') or task_id}"}
 
 
-def _plan_title(r: Run, version: int) -> str:
-    """What the approval card says: which issue, in a few words."""
+def _plan_title(r: Run, version: int | None) -> str:
+    """What the approval card says: which issue or task, in a few words."""
     subject = r.ground.get("subject") or {}
+    v = f" v{version}" if version else ""
+    title = " ".join(str(subject.get("title") or "").split())[:70]
     if subject.get("number"):
-        title = " ".join(str(subject.get("title") or "").split())[:70]
-        return f"Plan v{version} for #{subject['number']}" + (f": {title}" if title else "")
-    return f"Factory plan v{version}: {local.shown(r.repo.local_path) if r.repo.local_path else r.repo.full_name}"
+        return f"Plan{v} for #{subject['number']}" + (f": {title}" if title else "")
+    if title and r.request.subject.kind == "clickup_task":
+        return f"Plan{v}: {title}"
+    return f"Factory plan{v}: {local.shown(r.repo.local_path) if r.repo.local_path else r.repo.full_name}"
 
 
 def _prior_plan(item_id: str, requester: str, full_name: str, subject: dict | None = None) -> dict | None:
@@ -626,11 +629,23 @@ def _shareable(url: str | None) -> str | None:
     return None if ip.is_loopback or ip.is_unspecified or ip.is_private or ip.is_link_local else url
 
 
+def _plan_path(r: Run) -> Path:
+    """The plan file people approve: Markdown, or one HTML page
+    (FACTORY_PLAN_FORMAT). Runs that started before the setting keep .md."""
+    html_ = (r.settings.get("FACTORY_PLAN_FORMAT") or "markdown") == "html"
+    return _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.{'html' if html_ else 'md'}"
+
+
 def _publish_plan(r: Run, text: str, *, post: bool = True) -> str | None:
     def write() -> str:
-        target = _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.md"
+        target = _plan_path(r)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text, encoding="utf-8")
+        if target.suffix == ".html":
+            from . import plan_html
+
+            target.write_text(plan_html.render(_plan_title(r, None), text), encoding="utf-8")
+        else:
+            target.write_text(text, encoding="utf-8")
         return str(target)
 
     path = hub.work_item.checkpoint(routes.ANALYZE, write)
@@ -679,13 +694,9 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
     if not needed:
         return a
     for version in range(1, PLAN_REVISIONS + 2):
-        path = _output_dir() / f"plan-{r.record['plan_digest'][7:19]}.md"
+        path = _plan_path(r)
         analysis = r.record["analysis"]
-        public = _shareable(url)
-        progress.reply(f"Plan v{version} is ready: {len(analysis['plan'])} steps, "
-                       f"{len(analysis['acceptance_criteria'])} acceptance criteria. Approve it in your Inbox in "
-                       f"Hubzoid" + (f": {public}" if public else "") + ".",
-                       key=f"plan-wait:{version}", kind="question")
+        _ask_plan_approval(version, analysis, path, _shareable(url))
         progress.record(stage=routes.PLAN_REVIEW, waiting="plan_approval", plan_url=url)
         decision = hub.review_plan(path, title=_plan_title(r, version),
                                    approvers=[r.requester])
@@ -707,6 +718,31 @@ def _plan_gate(r: Run, c: Classification, research: Research | None, a: Analysis
         text, _ = _plan_document(r, c, a, research)
         url = _publish_plan(r, text, post=False)
     raise FactoryStop("plan_changes_requested", "The plan was not approved.")
+
+
+def _ask_plan_approval(version: int, analysis: dict, path: Path, public: str | None) -> None:
+    """Tell the requester the plan waits for them. Where the thread can carry
+    the decision (ClickUp with approve_in_task), the plan is attached and the
+    reply decides it. Elsewhere it is decided in Hubzoid."""
+    size = f"{len(analysis['plan'])} steps, {len(analysis['acceptance_criteria'])} acceptance criteria"
+    here = progress.approvals_here()
+    attached = progress.attachments()
+    if here:
+        text = (f"Plan v{version} is ready for your approval: {size}."
+                + (f" The plan is attached ({path.name})." if attached else "")
+                + "\n\nReply \"approve\" to build it, or \"change:\" followed by what to change, or \"reject\"."
+                + (f"\nYou can also read and approve it in Hubzoid: {public}" if public else ""))
+    else:
+        text = (f"Plan v{version} is ready: {size}."
+                + (f" The plan is attached ({path.name})." if attached else "")
+                + " Approve it in your Inbox in Hubzoid" + (f": {public}" if public else "") + ".")
+    try:
+        progress.reply(text, key=f"plan-wait:{version}", kind="approval", files=[path] if attached else None)
+    except Exception as exc:  # noqa: BLE001 - a run that already posted keeps its own wording
+        if "conflict" not in str(getattr(exc, "code", "") or exc) and not isinstance(exc, (ValueError, TypeError)):
+            raise
+        progress.reply(f"Plan v{version} is ready: {size}. Approve it in your Inbox in Hubzoid"
+                       + (f": {public}" if public else "") + ".", key=f"plan-wait:{version}", kind="question")
 
 
 def _context_current(r: Run, *, observed: str | None = None, pushed_branch: str | None = None) -> None:

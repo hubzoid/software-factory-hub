@@ -1,7 +1,8 @@
 version: 1
 # A ClickUp task moved to "ready for agent" starts factory work as the person who moved it. Questions come
 # back as task comments and that person's next comment answers them; the draft pull request is linked on the
-# task. Rename to clickup.yaml, replace the placeholder ids with your workspace's, then:
+# task. The plan is attached to the task and that person approves it with a comment ("approve", or "change:"
+# and what to change). Rename to clickup.yaml, replace the placeholder ids with your workspace's, then:
 #   hubzoid channels apply . --file channels/clickup.yaml --expected-revision absent
 #   # a person stores the ClickUp API token (pk_..., Settings, Apps), never in chat:
 #   hubzoid secrets set . --ref secret:channel/software-factory/clickup/token --stdin
@@ -10,7 +11,8 @@ version: 1
 #   hubzoid channels link . clickup --external-id <clickup-user-id> --account <email>
 #   hubzoid channels resume . clickup --expected-revision <rev>   # the file ships paused
 # Set FACTORY_CLICKUP_CONNECTION: clickup and add clickup to FACTORY_CHANNELS. Every status named below must
-# exist in each list. See docs/channels/clickup.md in the SDK.
+# exist in each list: ClickUp's API cannot add statuses, so add them in the list's (or space's) status settings.
+# A missing status is skipped and the comment still posts. See docs/channels/clickup.md in the SDK.
 # Who may start work here is a grant: "Start work from clickup" in Settings, Agents, Software Factory, Access.
 id: clickup
 provider: clickup
@@ -27,4 +29,6 @@ provider_config:
   statuses:
     ack: in progress
     question: needs answer
+    approval: needs approval
     result: in review
+  approve_in_task: true                 # the person who asked approves the plan with a comment

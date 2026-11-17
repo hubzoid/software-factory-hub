@@ -58,6 +58,10 @@ settings:
     description: True makes attended implementation wait for the requester to approve the exact plan. Unattended label work never waits on a person.
     type: boolean
     default: true
+  - name: FACTORY_PLAN_FORMAT
+    description: The plan file people approve, attached to the task where the channel can attach files. markdown is a .md file; html is one clean page.
+    default: markdown
+    regex: '^(markdown|html)$'
   - name: FACTORY_REVIEW_CYCLES
     description: How many times the implementer may revise after the reviewer requests changes (0 to 2).
     type: integer
