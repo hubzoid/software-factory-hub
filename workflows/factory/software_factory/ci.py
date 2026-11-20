@@ -165,7 +165,7 @@ def admit(r) -> dict:
         entry = github.entry_for(r.request.subject.repository_id) if r.request.subject.repository_id else None
         if entry is None:
             return {"quiet": "other_repository"}
-        repo = github.repo(entry)
+        repo = github.repo(entry, check_base=False)     # an existing pull request keeps its own base
         pr = _pr(repo, number)
         repo.base_branch = pr.get("base") or repo.base_branch
         try:
@@ -273,7 +273,7 @@ def admit_attended(r) -> dict:
         if entry is None:
             return {"stop": "repository_unavailable", "message": "This pull request is not in one of the factory's "
                     "repositories."}
-        repo = github.repo(entry)
+        repo = github.repo(entry, check_base=False)     # an existing pull request keeps its own base
         if not number:
             return {"stop": "policy_denied", "message": "Name the factory pull request to revise."}
         pr = _pr(repo, number)

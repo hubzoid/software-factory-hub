@@ -366,10 +366,12 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
             prior_item = _approved_retry(r.requester, repo.full_name, number)
         if prior_item:
             out["prior"] = _prior_plan(prior_item, r.requester, repo.full_name, out.get("subject"))
-            if (out["prior"] or {}).get("base_branch"):
+            if out["prior"]:
                 # The plan was made, and maybe approved, against this branch and
-                # its commit: they stay together even if the setting changed.
-                out["repo"]["base_branch"] = out["prior"]["base_branch"]
+                # its commit: they stay together even if the setting changed. A
+                # plan saved before base branches existed was made on the
+                # repository's default branch.
+                out["repo"]["base_branch"] = out["prior"].get("base_branch") or repo.default_branch
         return out
 
     r.ground.update(hub.work_item.checkpoint(routes.GROUND, read))
@@ -897,11 +899,11 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
             previous=previous, ci_context=ci_context), stage=routes.IMPLEMENT, revision=revision,
             checkout=checkout, **_where(r, routes.IMPLEMENT))
         r.record["implementation"] = impl.model_dump()
-        if not impl.committed and pr_number is not None and _desk_repair(ci_context):
+        if not impl.committed and pr_number is not None and _desk_repair(ci_context) and impl.deviations:
             # The implementer judged the Desk's findings not to need a change.
             # It says why on the pull request and leaves the open gate to a
             # person: no empty commit, and no claim that the Desk is green.
-            reasons = [x for x in (impl.deviations + impl.known_limitations) if x] or ["no reason given"]
+            reasons = [x for x in impl.deviations if x]
             raise FactoryStop("desk_findings_disputed", "The factory made no change for Engineering Desk's findings "
                               f"on `{(head or '')[:12]}`, because:\n"
                               + "\n".join(f"- {x}" for x in reasons[:10])

@@ -275,6 +275,7 @@ class FakeStations:
         self.verdicts = ["approve"]
         self.changes = [{"calc.py": "def total(xs):\n    return sum(xs)\n"}]
         self.committed = True
+        self.uncommitted_deviations: list[str] = []    # what an implementer that changed nothing says
         self.reviewed_override = None
         self.reviewer_dirty = False
         self.boxes: dict[str, dict] = {}
@@ -299,7 +300,8 @@ class FakeStations:
             box = self.boxes[self._box_for(definition)]
             if not self.committed:
                 out = {"branch": "x", "base": "main", "committed": False, "head_commit": None, "change_summary": [],
-                       "verification": [], "deviations": [], "known_limitations": ["The plan needs a decision."]}
+                       "verification": [], "deviations": list(self.uncommitted_deviations),
+                       "known_limitations": ["The plan needs a decision."]}
             else:
                 files = self.changes.pop(0) if len(self.changes) > 1 else self.changes[0]
                 start, patch, head = self.remote.commit_on(box["commit"], files, "Fix total")

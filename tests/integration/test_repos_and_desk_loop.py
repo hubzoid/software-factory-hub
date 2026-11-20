@@ -307,11 +307,54 @@ def test_a_finding_the_factory_judges_not_a_defect_is_explained_and_handed_over(
     rec = delivered(factory)
     desk_review(factory, rec)
     factory.stations.committed = False
+    factory.stations.uncommitted_deviations = ["calc.py: adding 1 is the documented service fee, not a bug."]
     out = factory.run(desk_status(factory, rec))
     assert outcome(out) == ("stopped", "desk_findings_disputed")
     last = factory.api.comments[rec["pr_number"]][-1]["body"]
     assert "made no change for Engineering Desk's findings" in last and "/hubzoid dismiss" in last
+    assert "documented service fee" in last
     assert factory.remote.head(rec["branch"]) == rec["pushed_sha"]          # no empty commit
+
+
+def test_an_unfinished_desk_repair_is_not_presented_as_a_dispute(factory):
+    desk_loop(factory)
+    rec = delivered(factory)
+    desk_review(factory, rec)
+    factory.stations.committed = False                       # no deviations: it could not finish
+    out = factory.run(desk_status(factory, rec))
+    assert outcome(out) == ("stopped", "implementation_not_pushed")
+
+
+def test_a_repair_works_even_when_the_configured_base_branch_is_gone(factory):
+    dev_branch(factory)
+    values(factory, FACTORY_REPO="example-co/widget@dev")
+    rec = factory.run(factory.label())["factory_v1"]
+    values(factory, FACTORY_REPO="example-co/widget@gone")
+    out = factory.run(red_ci(factory, rec))
+    assert outcome(out) == ("review_ready", None)
+    assert out["factory_v1"]["base_branch"] == "dev"
+
+
+def test_a_plan_saved_before_base_branches_keeps_the_default_branch(factory):
+    from hubzoid.work_items import service as wi
+    from hubzoid.work_items import store
+
+    dev_branch(factory)
+    plan_item = factory.chat("Plan the fix for the totals bug", issue=12, route="plan")
+    factory.run(plan_item)
+    saved = store.get_item(factory.hub_dir, plan_item["id"])
+    result = saved["result_json"]
+    result["result"]["factory_v1"].pop("base_branch", None)                  # as the old factory saved it
+    store.update_item(factory.hub_dir, plan_item["id"], expected_revision=saved["revision"], result_json=result)
+    values(factory, FACTORY_REPO="example-co/widget@dev")
+    item, _ = wi.admit(factory.hub_dir, workflow="factory", key="impl-from-old-plan", route="implement",
+                       input={"source": "chat", "request": "Build that plan",
+                              "subject": {"kind": "github_issue", "number": 12}, "from_work_item": plan_item["id"]},
+                       requester=h.OWNER, origin={"source": "chat", "surface": "web"})
+    out = factory.run(item)
+    assert outcome(out) == ("review_ready", None)
+    assert out["factory_v1"]["base_branch"] == "main"
+    assert factory.api.pulls[out["factory_v1"]["pr_number"]]["base"] == "main"
 
 
 # -- upgrade ---------------------------------------------------------------------------------------

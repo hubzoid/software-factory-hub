@@ -121,7 +121,7 @@ def _only_factory_repo(repository_id) -> None:
                              "for.")
 
 
-def repo(entry=None) -> Repo:
+def repo(entry=None, *, check_base: bool = True) -> Repo:
     """A configured repository, looked up through the connection by name,
     then always used by its numeric id, with its base branch: the entry's
     `@branch`, else the repository's GitHub default. `entry` is a
@@ -152,7 +152,7 @@ def repo(entry=None) -> Repo:
     info = read("getRepository", repository_id=match.id)["data"]
     default = info.get("default_branch") or "main"
     base = entry.base_branch or default
-    if entry.base_branch and branch_head(int(match.id), base) is None:
+    if check_base and entry.base_branch and branch_head(int(match.id), base) is None:
         raise FactoryRefused("base_branch_missing", f"The branch {base} does not exist in "
                              f"{info.get('full_name') or match.full_name}. Fix the @{base} part of FACTORY_REPO or "
                              "FACTORY_REPOS, or create the branch.")
