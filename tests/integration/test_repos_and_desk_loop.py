@@ -403,3 +403,19 @@ def test_nothing_more_to_change_after_a_pushed_desk_fix_is_not_a_dispute(factory
     assert outcome(out) == ("stopped", "implementation_not_pushed")
     assert not any("made no change for Engineering Desk" in c["body"] for c in factory.api.comments[rec["pr_number"]])
 
+
+def test_a_later_desk_round_keeps_the_earlier_rounds_findings(factory):
+    # Found live: round 2 undid round 1's fix because the original plan still
+    # allowed what round 1 refused.
+    desk_loop(factory)
+    rec = delivered(factory)
+    desk_review(factory, rec, findings="round one: refuse negative totals")
+    first = factory.run(desk_status(factory, rec))["factory_v1"]
+    desk_review(factory, {**rec, "pushed_sha": first["pushed_sha"]}, findings="round two: refuse bool people")
+    factory.run(desk_status(factory, {**rec, "pushed_sha": first["pushed_sha"]}, delivery="desk-2"))
+    implementer = [c for c in factory.stations.calls if c["name"] == "implementer"][-1]
+    reviewer = [c for c in factory.stations.calls if c["name"] == "reviewer"][-1]
+    assert "round one: refuse negative totals" in implementer["message"]      # as data, in the failing checks
+    assert "round two: refuse bool people" in implementer["message"]
+    assert "earlier_desk_findings" in reviewer["message"] and "stay in place" in reviewer["message"]
+

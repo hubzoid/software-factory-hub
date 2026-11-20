@@ -67,7 +67,8 @@ def attempts(repository_id: int, branch: str, cap: int, ledger: str = ATTEMPT) -
     return [s["head"] for s in slots(repository_id, branch, cap, ledger)]
 
 
-def reserve(repository_id: int, branch: str, head: str, cap: int, ledger: str = ATTEMPT) -> int | None:
+def reserve(repository_id: int, branch: str, head: str, cap: int, ledger: str = ATTEMPT,
+            extra: dict | None = None) -> int | None:
     """This failing head's attempt number, reserving the next slot once.
     None when the cap is used up. CI work on one pull request runs one at a
     time (one active work item per thread), so slots are not contended."""
@@ -77,7 +78,7 @@ def reserve(repository_id: int, branch: str, head: str, cap: int, ledger: str = 
     if len(used) >= cap:
         return None
     hub.shared_state[ledger.format(rid=repository_id, branch=branch, n=len(used) + 1)] = {
-        "head": head, "item": hub.work_item.id}
+        "head": head, "item": hub.work_item.id, **(extra or {})}
     return len(used) + 1
 
 
@@ -191,9 +192,11 @@ def admit(r) -> dict:
         unproven = [j["name"] for j in jobs if _kind(j) == "status" and not desk_evidence(j, pr["head_sha"])]
         jobs = [j for j in jobs if _kind(j) == "check" or desk_evidence(j, pr["head_sha"])]
         kinds = sorted({_kind(j) for j in jobs})
-        used, exhausted = {}, []
+        used, exhausted, earlier = {}, [], []
         for kind in ("check", "status"):
             taken = slots(repo.repository_id, pr["branch"], caps[kind], LEDGERS[kind])
+            if kind == "status":
+                earlier = [s["findings"] for s in taken if s.get("findings") and s["head"] != pr["head_sha"]]
             mine = next((s for s in taken if s["head"] == pr["head_sha"]), None)
             if mine and mine["item"] != hub.work_item.id:
                 return {"quiet": "duplicate_failure"}      # one repair per head, whatever failed
@@ -205,6 +208,11 @@ def admit(r) -> dict:
                     f"does not name the head {pr['head_sha'][:12]}, so the factory does not act on it. No repair "
                     "round was used. A person can check the review, or the Desk reviews the head again."}
         failing = {**failing, "jobs": [j for j in jobs if _kind(j) not in exhausted]}
+        if earlier:
+            # Found live: a later round undid an earlier round's fix because
+            # the original plan still said otherwise. Earlier findings travel
+            # with the branch, as data.
+            failing["earlier_desk_findings"] = earlier
         prior = _prior(entry.get("owner_item"))
         if not prior.get("analysis"):
             prior = _fallback(pr["branch"])
@@ -217,6 +225,10 @@ def admit(r) -> dict:
             added.append("Each blocking Engineering Desk finding at the previous head is fixed, or explained in "
                          "deviations as not a defect. Where a finding conflicts with an earlier acceptance "
                          "criterion, the finding wins and the deviation names the criterion it replaces.")
+        if earlier:
+            added.append("Fixes already made on this branch for earlier Engineering Desk findings (earlier_desk_findings "
+                         "in the failing checks) stay in place. Those findings also win over conflicting earlier "
+                         "acceptance criteria.")
         analysis["acceptance_criteria"] = list(analysis.get("acceptance_criteria") or []) + added
         return {"repo": repo.__dict__, "pr": pr, "attempts": used, "kinds": [k for k in kinds if k not in exhausted],
                 "exhausted": exhausted, "unproven": unproven,
@@ -241,7 +253,12 @@ def admit(r) -> dict:
                           "the allowed attempts have not turned it green. A person needs to take it from here.")
     numbers, taken = [], {}
     for kind in kinds:
-        n = reserve(r.repo.repository_id, pr["branch"], pr["head_sha"], caps[kind], LEDGERS[kind])
+        extra = None
+        if kind == "status":
+            text = "\n\n".join(str(j.get("comment") or j.get("summary") or "") for j in out["ci_context"].get("jobs") or []
+                               if _kind(j) == "status")
+            extra = {"findings": text[:4000]}
+        n = reserve(r.repo.repository_id, pr["branch"], pr["head_sha"], caps[kind], LEDGERS[kind], extra)
         if n is None:
             raise FactoryStop("ci_attempts_exhausted", f"The allowed {names[kind]} did not turn it green.")
         taken[kind] = n
