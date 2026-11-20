@@ -377,3 +377,29 @@ def test_work_saved_before_the_upgrade_replays(factory):
     assert again["factory_v1"]["pr_number"] == first["factory_v1"]["pr_number"]
     assert again["factory_v1"]["base_branch"] == "main"
     assert len(factory.api.pulls) == 1
+
+
+def test_a_desk_repair_says_the_finding_wins_over_an_older_criterion(factory):
+    desk_loop(factory)
+    rec = delivered(factory)
+    desk_review(factory, rec)
+    factory.run(desk_status(factory, rec))
+    reviewer = [c for c in factory.stations.calls if c["name"] == "reviewer"][-1]
+    assert "the finding wins" in reviewer["message"]
+    assert "The checks that failed at the previous head pass" not in reviewer["message"]   # CI was green
+
+
+def test_nothing_more_to_change_after_a_pushed_desk_fix_is_not_a_dispute(factory):
+    # Found live: the fix was pushed, the reviewer asked for more against an
+    # older criterion, and the second run changed nothing. That is not "no
+    # change for the Desk's findings".
+    desk_loop(factory)
+    rec = delivered(factory)
+    desk_review(factory, rec)
+    factory.stations.verdicts = ["request_changes", "approve"]
+    factory.stations.committed = [True, False]
+    factory.stations.uncommitted_deviations = ["Already fixed on the branch."]
+    out = factory.run(desk_status(factory, rec))
+    assert outcome(out) == ("stopped", "implementation_not_pushed")
+    assert not any("made no change for Engineering Desk" in c["body"] for c in factory.api.comments[rec["pr_number"]])
+

@@ -899,7 +899,8 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
             previous=previous, ci_context=ci_context), stage=routes.IMPLEMENT, revision=revision,
             checkout=checkout, **_where(r, routes.IMPLEMENT))
         r.record["implementation"] = impl.model_dump()
-        if not impl.committed and pr_number is not None and _desk_repair(ci_context) and impl.deviations:
+        if not impl.committed and pr_number is not None and _desk_repair(ci_context) and impl.deviations \
+                and head == expected_head:                  # nothing pushed in this repair yet
             # The implementer judged the Desk's findings not to need a change.
             # It says why on the pull request and leaves the open gate to a
             # person: no empty commit, and no claim that the Desk is green.

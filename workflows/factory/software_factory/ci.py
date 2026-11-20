@@ -209,8 +209,15 @@ def admit(r) -> dict:
         if not prior.get("analysis"):
             prior = _fallback(pr["branch"])
         analysis = dict(prior["analysis"])
-        analysis["acceptance_criteria"] = list(analysis.get("acceptance_criteria") or []) + [
-            "The checks that failed at the previous head pass, without weakening or skipping them."]
+        repairing = [k for k in kinds if k not in exhausted]
+        added = []
+        if "check" in repairing:
+            added.append("The checks that failed at the previous head pass, without weakening or skipping them.")
+        if "status" in repairing:
+            added.append("Each blocking Engineering Desk finding at the previous head is fixed, or explained in "
+                         "deviations as not a defect. Where a finding conflicts with an earlier acceptance "
+                         "criterion, the finding wins and the deviation names the criterion it replaces.")
+        analysis["acceptance_criteria"] = list(analysis.get("acceptance_criteria") or []) + added
         return {"repo": repo.__dict__, "pr": pr, "attempts": used, "kinds": [k for k in kinds if k not in exhausted],
                 "exhausted": exhausted, "unproven": unproven,
                 "owner_item": entry.get("owner_item"), "ci_context": failing,

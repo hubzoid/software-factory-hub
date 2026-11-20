@@ -296,7 +296,8 @@ class FakeStations:
             out = dict(self.analysis)
         elif name == "implementer":
             box = self.boxes[self._box_for(definition)]
-            if not self.committed:
+            committed = self.committed.pop(0) if isinstance(self.committed, list) else self.committed
+            if not committed:
                 out = {"branch": "x", "base": "main", "committed": False, "head_commit": None, "change_summary": [],
                        "verification": [], "deviations": list(self.uncommitted_deviations),
                        "known_limitations": ["The plan needs a decision."]}
