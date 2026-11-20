@@ -50,6 +50,7 @@ class Request:
     delivery_id: str | None = None
     from_work_item: str | None = None   # "implement the plan from work X"
     route_hint: str | None = None       # what an API caller or chat tool asked for
+    repo: str | None = None             # which configured repository a chat, MCP or API caller named
     require_plan_approval: bool = False  # an API caller asked to approve the plan, whatever the default
 
     def to_json(self) -> dict:
@@ -103,7 +104,8 @@ def _from_channel(p: dict) -> Request:
         else:
             instruction = text
         for key in ("head_sha", "head_branch", "base_sha", "fork", "pull_requests", "check_suite_id", "path",
-                    "line", "association", "labeler", "label"):
+                    "line", "association", "labeler", "label", "failure_kind", "status_context",
+                    "status_description", "status_poster"):
             if key in data:
                 untrusted[key] = data[key]
     elif provider == "linear":
@@ -123,6 +125,7 @@ def _from_channel(p: dict) -> Request:
         instruction = "Work on the ClickUp task this was started from." if kind == "task_ready" else text
         if task:
             untrusted["clickup_task"] = clickup_context(task)
+            untrusted["clickup_tags"] = [str(t) for t in task.get("tags") or [] if t][:20]
     else:
         instruction = text
         untrusted.update({k: data[k] for k in ("channel", "thread_ts") if k in data})
@@ -145,10 +148,11 @@ def _from_direct(p: dict) -> Request:
         tid = clickup_task_id(raw.get("identifier"))
         subject = Subject(kind="clickup_task", identifier=tid) if tid else Subject()
     route = p.get("route") if isinstance(p.get("route"), str) else None
+    repo = p.get("repo") if isinstance(p.get("repo"), str) and 0 < len(p["repo"]) <= 200 else None
     return Request(source=source, trigger=source, instruction=_clip(p.get("request") or p.get("text")),
                    subject=subject, from_work_item=p.get("from_work_item") if isinstance(
                        p.get("from_work_item"), str) else None, route_hint=route,
-                   require_plan_approval=p.get("require_plan_approval") is True)
+                   require_plan_approval=p.get("require_plan_approval") is True, repo=repo)
 
 
 #: The FACTORY_CHANNELS name for each source. The API is programmatic, like MCP.

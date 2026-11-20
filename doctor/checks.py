@@ -90,10 +90,27 @@ def _workflow_code(hub_dir: Path) -> None:
         sys.path.insert(0, code)
 
 
+def _entries(context):
+    """The configured repositories (software_factory.repos), or the reason
+    they do not parse."""
+    _workflow_code(_hub(context))
+    from software_factory import repos
+
+    try:
+        return repos.entries(context["settings"]), None
+    except repos.RepoSettingError as exc:
+        return [], str(exc)
+
+
 def settings(context) -> dict:
     """The settings validate (types, ranges, patterns) and fit together."""
     s = context["settings"]
     problems = []
+    listed, bad = _entries(context)
+    if bad:
+        problems.append(bad)
+    elif not listed and not _is_local(s.get("FACTORY_REPO")):
+        problems.append("set FACTORY_REPO, or FACTORY_REPOS for several repositories")
     channels = s.get("FACTORY_CHANNELS") or []
     results = "Reviewed branches in your folder" if _is_local(s.get("FACTORY_REPO")) else "Reviewed draft pull requests"
     if "linear" in channels and not s.get("FACTORY_LINEAR_CONNECTION"):
@@ -112,7 +129,9 @@ def settings(context) -> dict:
         return _row("fail", "; ".join(problems) + ".", "Fix hub.settings.yaml, then `hubzoid hub configure . --check`.",
                     card=_card(results, "Settings need a fix"))
     approval = "on" if s.get("FACTORY_REQUIRE_PLAN_APPROVAL", True) else "off"
-    return _row("ok", f"{s.get('FACTORY_REPO')}: label {s.get('FACTORY_LABEL')!r}, branches "
+    where = s.get("FACTORY_REPO") if _is_local(s.get("FACTORY_REPO")) else ", ".join(
+        e.full_name + (f" (base {e.base_branch})" if e.base_branch else "") for e in listed)
+    return _row("ok", f"{where}: label {s.get('FACTORY_LABEL')!r}, branches "
                       f"{s.get('FACTORY_BRANCH_PREFIX')}*, {s.get('FACTORY_REVIEW_CYCLES')} review cycles, "
                       f"{s.get('FACTORY_CI_ATTEMPTS')} CI attempts, plan approval {approval}.",
                 card=_card(results, f"Plan approval {approval}. A person merges each one."))
@@ -126,7 +145,11 @@ def github(context) -> dict:
     if _is_local(s.get("FACTORY_REPO")):
         return _local_repository(hub_dir, s["FACTORY_REPO"])
     cid = s.get("FACTORY_GITHUB_CONNECTION") or "github"
-    name = str(s.get("FACTORY_REPO") or "")
+    listed, bad = _entries(context)
+    name = ", ".join(e.full_name for e in listed) or str(s.get("FACTORY_REPO") or "")
+    if bad or not listed:
+        return _row("fail", bad or "Set FACTORY_REPO, or FACTORY_REPOS for several repositories.",
+                    "Fix hub.settings.yaml, then `hubzoid hub configure . --check`.", card=_card(name, "No repository"))
     try:
         from hubzoid.channels import config
 
@@ -135,16 +158,23 @@ def github(context) -> dict:
         return _row("fail", f"The GitHub connection {cid!r} is not applied.",
                     f"Connect it: `hubzoid channels github connect . {cid} --owner <org> --owner-type organization "
                     f"--name <app-name> --open` (a hosted hub), or `hubzoid channels github connect . {cid} --mode pat "
-                    f"--repository {s.get('FACTORY_REPO')}` (a laptop). See SETUP.md, step 3.",
+                    f"--repository {listed[0].full_name}` (a laptop). See SETUP.md, step 3.",
                     card=_card(name, "GitHub not connected"))
     cfg = conn.settings
     problems, notes = [], []
     if conn.config.workflow != FACTORY:
         problems.append(f"it starts {conn.config.workflow or 'the chat agent'}, not the factory workflow")
     repos = {r.full_name.lower(): r.id for r in (cfg.repositories or [])}
-    want = (s.get("FACTORY_REPO") or "").lower()
-    if want not in repos:
-        problems.append(f"{want} is not one of its repositories ({', '.join(sorted(repos)) or 'none'})")
+    want = ", ".join(e.full_name for e in listed)
+    for e in listed:
+        if e.full_name.lower() not in repos:
+            problems.append(f"{e.full_name} is not one of its repositories ({', '.join(sorted(repos)) or 'none'})")
+    if len(listed) > 1:
+        trigger = _clickup_trigger_tag(hub_dir, s)
+        clash = [e.short for e in listed if trigger and trigger.lower() in e.names()]
+        if clash:
+            problems.append(f"the ClickUp trigger tag {trigger!r} is also the repository name {clash[0]!r}, so it "
+                            "would also pick that repository: rename one")
     if cfg.rules.label != s.get("FACTORY_LABEL"):
         problems.append(f"its label rule is {cfg.rules.label!r}, FACTORY_LABEL is {s.get('FACTORY_LABEL')!r}")
     routes = {k: cfg.rules.route(k) for k in WANT_ROUTES}
@@ -174,6 +204,18 @@ def github(context) -> dict:
                     f"`hubzoid channels doctor . {cid}`", card=_card(name, f"GitHub connected, {state}"))
     return _row("ok", f"GitHub connection {cid} covers {want} and routes label, mention, CI and new pull requests to "
                       "the factory.", card=_card(name, "GitHub connected"))
+
+
+def _clickup_trigger_tag(hub_dir, s) -> str | None:
+    cid = s.get("FACTORY_CLICKUP_CONNECTION")
+    if not cid:
+        return None
+    try:
+        from hubzoid.channels import config
+
+        return getattr(config.active(hub_dir, cid).settings.trigger, "tag", None)
+    except Exception:  # noqa: BLE001 - the ClickUp check reports a missing connection
+        return None
 
 
 def stations(context) -> dict:

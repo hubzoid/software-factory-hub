@@ -8,7 +8,7 @@ doctor:
   - id: factory.github
     entrypoint: doctor/checks.py:github
     timeout_seconds: 20
-    requires: [FACTORY_REPO, FACTORY_GITHUB_CONNECTION]
+    requires: [FACTORY_GITHUB_CONNECTION]
     required: true
   - id: factory.stations
     entrypoint: doctor/checks.py:stations

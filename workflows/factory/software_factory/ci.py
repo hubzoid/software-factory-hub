@@ -15,6 +15,17 @@ model. Both are weak checks. Here a repair needs, freshly checked:
   that took it, so that work may run again after a manager restarts it,
   while other work for the same head stays a duplicate.
 
+Engineering Desk's merge gate reaches the same path: a failed
+``engineering-desk/review`` status (the GitHub channel's
+``rules.status_failures``) arrives as a failed check whose job has
+``kind: status`` and the Desk's summary comment. Its rounds have their own
+ledger and cap (``FACTORY_DESK_ATTEMPTS``), so a red CI run never uses up the
+Desk's rounds or the other way round. One repair runs per head whatever
+failed, and charges each kind it repairs. A Desk failure counts only when the
+summary names the exact failing head (its hidden head marker); otherwise the
+repair stops without using a round. Machinist's PR watcher treats failing
+statuses the same way (``internal/controlplane/github_followups.go``).
+
 The attempt comment is posted before the repair starts, so a run that dies
 mid-repair still counts. Stale or duplicate events stop quietly.
 """
@@ -31,39 +42,53 @@ class Quiet(FactoryStop):
 
 
 ATTEMPT = "factory_v1:ci:{rid}:{branch}:{n}"
+DESK_ATTEMPT = "factory_v1:desk:{rid}:{branch}:{n}"
+DESK_HEAD = "<!-- engineering-desk:head:{sha} -->"
+LEDGERS = {"check": ATTEMPT, "status": DESK_ATTEMPT}
+SINGULAR = {"check": "CI fix", "status": "Engineering Desk fix"}
 
 
-def slots(repository_id: int, branch: str, cap: int) -> list[dict]:
+def slots(repository_id: int, branch: str, cap: int, ledger: str = ATTEMPT) -> list[dict]:
     """The repair attempts already used on this branch, in order: the failing
     head and the work item that took the slot. Each attempt is its own
     write-once key, so no other writer's update of the branch ledger can
     erase one, and a new head never resets the count."""
     out = []
     for n in range(1, cap + 2):
-        value = hub.shared_state.get(ATTEMPT.format(rid=repository_id, branch=branch, n=n))
+        value = hub.shared_state.get(ledger.format(rid=repository_id, branch=branch, n=n))
         if not value:
             break
         out.append(value if isinstance(value, dict) else {"head": value, "item": None})
     return out
 
 
-def attempts(repository_id: int, branch: str, cap: int) -> list[str]:
+def attempts(repository_id: int, branch: str, cap: int, ledger: str = ATTEMPT) -> list[str]:
     """The failing heads that already used a repair attempt on this branch."""
-    return [s["head"] for s in slots(repository_id, branch, cap)]
+    return [s["head"] for s in slots(repository_id, branch, cap, ledger)]
 
 
-def reserve(repository_id: int, branch: str, head: str, cap: int) -> int | None:
+def reserve(repository_id: int, branch: str, head: str, cap: int, ledger: str = ATTEMPT,
+            extra: dict | None = None) -> int | None:
     """This failing head's attempt number, reserving the next slot once.
     None when the cap is used up. CI work on one pull request runs one at a
     time (one active work item per thread), so slots are not contended."""
-    used = attempts(repository_id, branch, cap)
+    used = attempts(repository_id, branch, cap, ledger)
     if head in used:
         return used.index(head) + 1
     if len(used) >= cap:
         return None
-    hub.shared_state[ATTEMPT.format(rid=repository_id, branch=branch, n=len(used) + 1)] = {
-        "head": head, "item": hub.work_item.id}
+    hub.shared_state[ledger.format(rid=repository_id, branch=branch, n=len(used) + 1)] = {
+        "head": head, "item": hub.work_item.id, **(extra or {})}
     return len(used) + 1
+
+
+def desk_evidence(job: dict, head: str) -> bool:
+    """The Desk's summary comment names this exact head."""
+    return DESK_HEAD.format(sha=head) in str(job.get("comment") or "")
+
+
+def _kind(job: dict) -> str:
+    return "status" if job.get("kind") == "status" else "check"
 
 
 def _prior(owner_item: str) -> dict:
@@ -101,6 +126,7 @@ def _pr(repo, number: int) -> dict:
     pr = ctx.get("pull_request") or {}
     head = pr.get("head") or {}
     return {"number": number, "branch": head.get("ref"), "head_sha": ctx.get("head_sha"),
+            "base": (pr.get("base") or {}).get("ref"),
             "fork": bool((head.get("repo") or {}).get("fork")) or (
                 (head.get("repo") or {}).get("full_name", repo.full_name).lower() != repo.full_name.lower()),
             "url": pr.get("html_url"), "title": pr.get("title"), "state": pr.get("state")}
@@ -133,11 +159,16 @@ def admit(r) -> dict:
     number = r.request.subject.number
     cap = r.settings["FACTORY_CI_ATTEMPTS"]
 
+    desk_cap = r.settings.get("FACTORY_DESK_ATTEMPTS", 2)
+    caps = {"check": cap, "status": desk_cap}
+
     def check() -> dict:
-        repo = github.repo()
-        if r.request.subject.repository_id not in (None, repo.repository_id):
+        entry = github.entry_for(r.request.subject.repository_id) if r.request.subject.repository_id else None
+        if entry is None:
             return {"quiet": "other_repository"}
+        repo = github.repo(entry, check_base=False)     # an existing pull request keeps its own base
         pr = _pr(repo, number)
+        repo.base_branch = pr.get("base") or repo.base_branch
         try:
             require_open(repo, number)
         except FactoryStop as stop:
@@ -155,20 +186,52 @@ def admit(r) -> dict:
             return {"quiet": "not_bound_pull_request"}
         failing = github.read("getCiFailureContext", repository_id=repo.repository_id, head_sha=pr["head_sha"],
                               number=number)["data"]
-        if not failing.get("jobs"):
+        jobs = failing.get("jobs") or []
+        if not jobs:
             return {"quiet": "ci_not_failing"}
-        taken = slots(repo.repository_id, pr["branch"], cap)
-        used = [s["head"] for s in taken]
-        mine = next((s for s in taken if s["head"] == pr["head_sha"]), None)
-        if mine and mine["item"] != hub.work_item.id:
-            return {"quiet": "duplicate_failure"}
+        unproven = [j["name"] for j in jobs if _kind(j) == "status" and not desk_evidence(j, pr["head_sha"])]
+        jobs = [j for j in jobs if _kind(j) == "check" or desk_evidence(j, pr["head_sha"])]
+        kinds = sorted({_kind(j) for j in jobs})
+        used, exhausted, earlier = {}, [], []
+        for kind in ("check", "status"):
+            taken = slots(repo.repository_id, pr["branch"], caps[kind], LEDGERS[kind])
+            if kind == "status":
+                earlier = [s["findings"] for s in taken if s.get("findings") and s["head"] != pr["head_sha"]]
+            mine = next((s for s in taken if s["head"] == pr["head_sha"]), None)
+            if mine and mine["item"] != hub.work_item.id:
+                return {"quiet": "duplicate_failure"}      # one repair per head, whatever failed
+            used[kind] = [s["head"] for s in taken]
+            if kind in kinds and not mine and len(taken) >= caps[kind]:
+                exhausted.append(kind)
+        if not kinds:
+            return {"stop": "desk_evidence_missing", "message": "Engineering Desk's status failed, but its summary "
+                    f"does not name the head {pr['head_sha'][:12]}, so the factory does not act on it. No repair "
+                    "round was used. A person can check the review, or the Desk reviews the head again."}
+        failing = {**failing, "jobs": [j for j in jobs if _kind(j) not in exhausted]}
+        if earlier:
+            # Found live: a later round undid an earlier round's fix because
+            # the original plan still said otherwise. Earlier findings travel
+            # with the branch, as data.
+            failing["earlier_desk_findings"] = earlier
         prior = _prior(entry.get("owner_item"))
         if not prior.get("analysis"):
             prior = _fallback(pr["branch"])
         analysis = dict(prior["analysis"])
-        analysis["acceptance_criteria"] = list(analysis.get("acceptance_criteria") or []) + [
-            "The checks that failed at the previous head pass, without weakening or skipping them."]
-        return {"repo": repo.__dict__, "pr": pr, "attempts": used, "exhausted": not mine and len(used) >= cap,
+        repairing = [k for k in kinds if k not in exhausted]
+        added = []
+        if "check" in repairing:
+            added.append("The checks that failed at the previous head pass, without weakening or skipping them.")
+        if "status" in repairing:
+            added.append("Each blocking Engineering Desk finding at the previous head is fixed, or explained in "
+                         "deviations as not a defect. Where a finding conflicts with an earlier acceptance "
+                         "criterion, the finding wins and the deviation names the criterion it replaces.")
+        if earlier:
+            added.append("Fixes already made on this branch for earlier Engineering Desk findings (earlier_desk_findings "
+                         "in the failing checks) stay in place. Those findings also win over conflicting earlier "
+                         "acceptance criteria.")
+        analysis["acceptance_criteria"] = list(analysis.get("acceptance_criteria") or []) + added
+        return {"repo": repo.__dict__, "pr": pr, "attempts": used, "kinds": [k for k in kinds if k not in exhausted],
+                "exhausted": exhausted, "unproven": unproven,
                 "owner_item": entry.get("owner_item"), "ci_context": failing,
                 "classification": prior["classification"], "analysis": analysis, "brain": _brain_of(repo), "context_revision": _revision_of(repo)}
 
@@ -177,23 +240,45 @@ def admit(r) -> dict:
         raise Quiet(out["quiet"], "")
     if out.get("stop"):
         raise FactoryStop(out["stop"], out["message"])
-    r.repo = github.Repo(**out["repo"])
+    r.repo = github.bind(github.Repo(**out["repo"]))
     pr = out["pr"]
-    if out["exhausted"]:
+    # Work admitted before the Desk loop saved `exhausted` as a flag for CI.
+    exhausted = out["exhausted"] if isinstance(out["exhausted"], list) else (["check"] if out["exhausted"] else [])
+    kinds = out.get("kinds", [] if exhausted else ["check"])
+    names = {"check": "CI fixes", "status": "Engineering Desk fixes"}
+    if not kinds:
         # The pull request is this work's own thread: the stop reply says it once.
-        raise FactoryStop("ci_attempts_exhausted", f"Pausing automated CI fixes on this pull request to avoid a loop: "
-                          f"{cap} attempts have not turned the checks green. A person needs to take it from here.")
-    attempt = reserve(r.repo.repository_id, pr["branch"], pr["head_sha"], cap)
-    if attempt is None:
-        raise FactoryStop("ci_attempts_exhausted", f"{cap} CI repair attempts did not turn the checks green.")
-    broken = ", ".join(j.get("name") or "a check" for j in out["ci_context"].get("jobs") or [])
+        what = " and ".join(names[k] for k in exhausted)
+        raise FactoryStop("ci_attempts_exhausted", f"Pausing automated {what} on this pull request to avoid a loop: "
+                          "the allowed attempts have not turned it green. A person needs to take it from here.")
+    numbers, taken = [], {}
+    for kind in kinds:
+        extra = None
+        if kind == "status":
+            text = "\n\n".join(str(j.get("comment") or j.get("summary") or "") for j in out["ci_context"].get("jobs") or []
+                               if _kind(j) == "status")
+            extra = {"findings": text[:4000]}
+        n = reserve(r.repo.repository_id, pr["branch"], pr["head_sha"], caps[kind], LEDGERS[kind], extra)
+        if n is None:
+            raise FactoryStop("ci_attempts_exhausted", f"The allowed {names[kind]} did not turn it green.")
+        taken[kind] = n
+        numbers.append(f"{SINGULAR[kind]} attempt {n} of {caps[kind]}")
+    jobs = out["ci_context"].get("jobs") or []
+    broken = ", ".join(("Engineering Desk findings" if _kind(j) == "status" else j.get("name") or "a check")
+                       for j in jobs)
+    left = "".join(f" {names[k]} are used up, so a person takes those from here." for k in exhausted)
+    if out.get("unproven"):
+        left += " Engineering Desk's status failed but its summary is for another head, so it is left as it is."
     # Posted before the repair starts, so a run that dies mid-repair still counts.
-    progress.reply(f"CI fix attempt {attempt} of {cap} starting on `{pr['head_sha'][:12]}`. Failing: {broken}.",
+    progress.reply(f"{'; '.join(numbers)} starting on `{pr['head_sha'][:12]}`. Failing: {broken}.{left}",
                    key=f"ci-attempt:{pr['head_sha']}", kind="progress")
+    attempt = taken.get("check")
+    desk_attempt = taken.get("status")
     r.ground.update(brain=out["brain"], context_revision=out["context_revision"], subject={"number": number, "url": pr["url"], "title": pr["title"]},
                     subject_text={"title": pr["title"], "failing_checks": out["ci_context"]})
-    r.record.update(repository=r.repo.full_name, branch=pr["branch"], ci_attempt=attempt, failing_head=pr["head_sha"])
-    progress.record(branch=pr["branch"], ci_attempt=attempt)
+    r.record.update(repository=r.repo.full_name, base_branch=r.repo.base, branch=pr["branch"], ci_attempt=attempt,
+                    desk_attempt=desk_attempt, failing_head=pr["head_sha"], repair_kinds=kinds)
+    progress.record(branch=pr["branch"], ci_attempt=attempt, desk_attempt=desk_attempt)
     return {"branch": pr["branch"], "head_sha": pr["head_sha"], "owner_item": out["owner_item"],
             "classification": out["classification"], "analysis": out["analysis"], "ci_context": out["ci_context"],
             "revision": 1, "pr_number": number}
@@ -203,12 +288,20 @@ def admit_attended(r) -> dict:
     """A person asks to change a factory pull request (a review mention, or
     chat naming the pull request). Same ownership proof, no CI counter."""
     number = r.request.subject.number
+    from .pipeline import _target
+
+    target = None if r.request.subject.repository_id else _target(r)
 
     def check() -> dict:
-        repo = github.repo()
+        entry = github.entry_for(r.request.subject.repository_id) if r.request.subject.repository_id else target
+        if entry is None:
+            return {"stop": "repository_unavailable", "message": "This pull request is not in one of the factory's "
+                    "repositories."}
+        repo = github.repo(entry, check_base=False)     # an existing pull request keeps its own base
         if not number:
             return {"stop": "policy_denied", "message": "Name the factory pull request to revise."}
         pr = _pr(repo, number)
+        repo.base_branch = pr.get("base") or repo.base_branch
         try:
             require_open(repo, number)
         except FactoryStop as stop:
@@ -230,7 +323,7 @@ def admit_attended(r) -> dict:
     out = hub.work_item.checkpoint(routes.CI_CHECK, check)
     if out.get("stop"):
         raise FactoryStop(out["stop"], out["message"])
-    r.repo = github.Repo(**out["repo"])
+    r.repo = github.bind(github.Repo(**out["repo"]))
     pr = out["pr"]
     where = ""
     if r.request.data.get("path"):

@@ -28,6 +28,8 @@ Start with a scratch copy you own. Creating a GitHub repository, seeding issues 
 `FACTORY_REPO` takes one of two forms:
 
 - `OWNER/REPO`: a GitHub repository. Steps 3 (connect GitHub) applies.
+- `OWNER/REPO@BRANCH`: the same, building on and opening pull requests into `BRANCH` instead of the repository's GitHub default branch (for example when features merge into `dev`). The factory never changes the repository's default branch.
+- Several repositories: leave `FACTORY_REPO` empty and list them in `FACTORY_REPOS` (`[owner/api@dev, owner/web]`). Each piece of work uses exactly one. A GitHub event uses its own repository, a ClickUp task names one with a tag equal to the repository's short name (`api`), and chat asks when it is unclear. Short names must be unique and must not equal the ClickUp trigger tag. One sandbox profile and one setup command serve them all, so repositories that need a different build image belong in their own factory.
 - A folder path starting with `/` or `~/`: local repository mode. No GitHub, no `gh`, and step 3 is skipped. The folder must be the top folder of its own Git repository, outside this hub, with at least one commit on a branch. The factory starts from its current branch and leaves each result as a reviewed branch there, without touching your working tree. It plans and builds; issues and pull requests don't exist in this mode. Set `FACTORY_CHANNELS: [chat, mcp]`.
 
 For the sample in local mode, copy it out of the hub first (pointing at `fixtures/sample-repo` in place is refused, because it is inside the hub's own repository):
@@ -156,3 +158,23 @@ Then ask “Implement the fix for issue #NUMBER; show me the plan first.” Appr
 Grant the teammate access to this hub and `wf_factory` using the SDK's existing access controls; do not give connection or secret administration by default. Verify one allowed request and a denied account. Linked GitHub/Slack/Linear identities do not inherit rights from text in a ticket. Raw MCP tools use the same domain service and access checks; only delegated Hub-agent execution runs the Hub prompts. Follow the installed Hubzoid release's `docs/access-management.md` and `docs/mcp.md` for the concrete CLI/API connection and grant surface.
 
 [Settings](docs/settings.md) identifies file choices and engineering extensions. [Operations](docs/operations.md) covers pause/recovery/backup/upgrade.
+
+## 7. Optional: fix Engineering Desk findings on the factory's pull requests
+
+When Engineering Desk reviews the same repositories with its merge gate on, the factory can fix the Desk's blocking findings on its own draft pull request, the way it fixes red CI. The Desk reports through its `engineering-desk/review` commit status. Nothing here gives the factory a Desk key.
+
+1. In the Engineering Desk hub, for each repository the factory works on: `status_check: gate`, `skip_drafts: false` (the factory opens drafts), and the factory's GitHub App bot in `review_bots`.
+2. In this hub's `channels/github.yaml`, add the rule, with the login that posts the Desk's status (its App bot, or the owner of its token):
+
+   ```yaml
+   provider_config:
+     rules:
+       status_failures:
+         - {context: engineering-desk/review, poster: engineering-desk-bot}
+   ```
+
+3. Give the GitHub App the **Commit statuses: read** permission and the **Status** event, and accept the update on the installation (new Apps ask for both). `hubzoid channels doctor . github` warns until it is done.
+4. `FACTORY_DESK_ATTEMPTS` (default 2) caps the rounds per branch, counted apart from CI attempts.
+
+Each round starts only when the Desk's summary names the exact failing commit. The factory fixes each blocking finding, or explains on the pull request why one is not a defect and hands the open gate to a person: someone other than the pull request's author dismisses it with `/hubzoid dismiss`. When the rounds are used up it says so on the pull request and stops.
+

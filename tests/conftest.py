@@ -134,6 +134,7 @@ class FakeGitHub:
         self.permission = "write"
         self.failing_jobs = [{"name": "tests", "conclusion": "failure"}]
         self.base_jobs: list[dict] = []          # the checks on main's head (green unless a test says)
+        self.statuses: dict[str, list[dict]] = {}   # commit statuses by commit
         self.next = 100
 
     def _pr_json(self, n):
@@ -144,7 +145,8 @@ class FakeGitHub:
                 "html_url": f"https://github.com/{FULL}/pull/{n}", "user": {"login": "factory[bot]"},
                 "head": {"ref": pr["head"], "sha": head, "repo": {"full_name": pr.get("head_repo", FULL),
                                                                   "fork": pr.get("fork", False)}},
-                "base": {"ref": pr["base"], "sha": self.remote.head(pr["base"])}, "changed_files": 1,
+                "base": {"ref": pr["base"], "sha": self.remote.head(pr["base"]), "repo": {"id": REPO_ID}},
+                "changed_files": 1,
                 "node_id": f"PR_{n}"}
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
@@ -221,6 +223,20 @@ class FakeGitHub:
         if m:
             return R(200, json=[{"filename": "calc.py", "status": "modified", "additions": 1, "deletions": 1,
                                  "changes": 2, "patch": "@@ -1 +1 @@"}] if m.group(2) == "files" else [])
+        m = re.fullmatch(rf"/repos/{FULL}/commits/([0-9a-f]+)/statuses", path)
+        if m:
+            return R(200, json=self.statuses.get(m.group(1), []))     # newest first, with each creator
+        m = re.fullmatch(rf"/repos/{FULL}/commits/([0-9a-f]+)/pulls", path)
+        if m:
+            return R(200, json=[self._pr_json(n) for n in self.pulls
+                                if self._pr_json(n)["head"]["sha"] == m.group(1)])
+        m = re.fullmatch(rf"/repos/{FULL}/issues/comments/(\d+)", path)
+        if m:
+            for n, items in self.comments.items():
+                for c in items:
+                    if c["id"] == int(m.group(1)):
+                        return R(200, json={**c, "issue_url": f"https://api.github.com/repos/{FULL}/issues/{n}"})
+            return R(404, json={})
         m = re.fullmatch(rf"/repos/{FULL}/commits/([0-9a-f]+)/check-runs", path)
         if m:
             jobs = self.base_jobs if m.group(1) == self.remote.head("main") else self.failing_jobs
@@ -257,6 +273,7 @@ class FakeStations:
         self.verdicts = ["approve"]
         self.changes = [{"calc.py": "def total(xs):\n    return sum(xs)\n"}]
         self.committed = True
+        self.uncommitted_deviations: list[str] = []    # what an implementer that changed nothing says
         self.reviewed_override = None
         self.reviewer_dirty = False
         self.boxes: dict[str, dict] = {}
@@ -279,9 +296,11 @@ class FakeStations:
             out = dict(self.analysis)
         elif name == "implementer":
             box = self.boxes[self._box_for(definition)]
-            if not self.committed:
+            committed = self.committed.pop(0) if isinstance(self.committed, list) else self.committed
+            if not committed:
                 out = {"branch": "x", "base": "main", "committed": False, "head_commit": None, "change_summary": [],
-                       "verification": [], "deviations": [], "known_limitations": ["The plan needs a decision."]}
+                       "verification": [], "deviations": list(self.uncommitted_deviations),
+                       "known_limitations": ["The plan needs a decision."]}
             else:
                 files = self.changes.pop(0) if len(self.changes) > 1 else self.changes[0]
                 start, patch, head = self.remote.commit_on(box["commit"], files, "Fix total")
@@ -409,12 +428,20 @@ def conn(factory_hub, api):
         serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
     ss.put(factory_hub, scope="channel", target="factory/github", name="private-key", value=pem, actor="test")
     ss.put(factory_hub, scope="channel", target="factory/github", name="webhook-secret", value=HOOK, actor="test")
-    text = (factory_hub / "channels_github.yaml")
+    cfg = github_channel()
+    v = config.load_text(factory_hub, config.render(cfg))
+    assert v.valid, v.errors
+    config.apply(factory_hub, v.data, expected_revision="absent", actor="test")
+    return config.active(factory_hub, "github")
+
+
+def github_channel(*, repositories=None, status_failures=None) -> dict:
+    """The test GitHub App connection's file, as a dict."""
     cfg = {"version": 1, "id": "github", "provider": "github", "enabled": True, "workflow": "factory",
            "run_as": "workflow", "allowed_groups": [], "progress": True,
            "provider_config": {"mode": "app", "owner": {"type": "organization", "login": "example-co", "id": 101},
                                "app_id": 9001, "installation_id": 7001,
-                               "repositories": [{"id": REPO_ID, "full_name": FULL}],
+                               "repositories": repositories or [{"id": REPO_ID, "full_name": FULL}],
                                "private_key_ref": "secret:channel/factory/github/private-key",
                                "webhook_secret_ref": "secret:channel/factory/github/webhook-secret",
                                "bot_name": "acme-factory",
@@ -423,11 +450,19 @@ def conn(factory_hub, api):
                                          "routes": {"mention": "request", "review_mention": "request",
                                                     "label": "implement", "pull_request": "summarize",
                                                     "ci_failure": "revise"}}}}
-    del text
-    v = config.load_text(factory_hub, config.render(cfg))
+    if status_failures:      # only when used: a released Hubzoid without the rule refuses the key
+        cfg["provider_config"]["rules"]["status_failures"] = status_failures
+    return cfg
+
+
+def reapply_github(hub_dir, **changes):
+    """Change the applied test GitHub connection (more repositories, status rules)."""
+    from hubzoid.channels import config
+
+    v = config.load_text(hub_dir, config.render(github_channel(**changes)))
     assert v.valid, v.errors
-    config.apply(factory_hub, v.data, expected_revision="absent", actor="test")
-    return config.active(factory_hub, "github")
+    config.apply(hub_dir, v.data, expected_revision=config.active(hub_dir, "github").revision, actor="test")
+    return config.active(hub_dir, "github")
 
 
 @pytest.fixture

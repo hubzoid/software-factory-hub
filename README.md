@@ -133,7 +133,7 @@ software-factory/
 
 Each station is one page of instructions. Edit it in your checkout and review the change like any commit.
 
-To point it at your own repository, set `FACTORY_REPO` in `hub.settings.yaml` (`OWNER/REPO` on GitHub, or the path of a Git folder on this computer, starting with `/` or `~/`) and replace the install in `sandboxes/factory.yaml` (Docker) or `FACTORY_LOCAL_SETUP` (without Docker) with your repository's locked install, such as `npm ci` or `uv sync --frozen`. Then bootstrap a source-linked brief from committed files you choose:
+To point it at your own repository, set `FACTORY_REPO` in `hub.settings.yaml` (`OWNER/REPO` on GitHub, `OWNER/REPO@BRANCH` to build on a branch other than the default, or the path of a Git folder on this computer, starting with `/` or `~/`; several GitHub repositories go in `FACTORY_REPOS`) and replace the install in `sandboxes/factory.yaml` (Docker) or `FACTORY_LOCAL_SETUP` (without Docker) with your repository's locked install, such as `npm ci` or `uv sync --frozen`. Then bootstrap a source-linked brief from committed files you choose:
 
 ```bash
 python scripts/factory_setup.py context --checkout PATH --repository OWNER/REPO --source FILE --test-command 'CMD'
@@ -155,7 +155,7 @@ Docker isolates more: its own file system, and CPU and memory limits. Locally, c
 
 ## Safety
 
-- **No merge, no push to a protected branch, no repository administration.** A person marks a draft ready and merges in GitHub. Writes go only to `FACTORY_REPO`, and unattended work writes only on the issue or pull request it came from.
+- **No merge, no push to a protected branch, no repository administration.** A person marks a draft ready and merges in GitHub. Each piece of work writes only to its one repository (`FACTORY_REPO`, or the one it picked from `FACTORY_REPOS`), and unattended work writes only on the issue or pull request it came from.
 - **The person who asked decides.** Attended implementation waits for the requester to approve the exact plan. An administrator cannot approve for them.
 - **Inputs are data, never instructions.** Issue text, comments, repository files and web pages are read as data. Hidden HTML comments and invisible characters are removed before a model reads them.
 

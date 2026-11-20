@@ -50,7 +50,7 @@ def _record(item_id: str) -> dict:
 
 
 def _start(request: str, issue_number: int | None, route: str, from_work_item: str | None, surface: str,
-           show_plan_first: bool = False, clickup_task: str | None = None) -> dict:
+           show_plan_first: bool = False, clickup_task: str | None = None, repo: str | None = None) -> dict:
     from hubzoid import _request_ctx
     from hubzoid.work_items import service
     from hubzoid.work_items.errors import WorkItemError
@@ -73,6 +73,8 @@ def _start(request: str, issue_number: int | None, route: str, from_work_item: s
         payload["from_work_item"] = from_work_item
     if show_plan_first:
         payload["require_plan_approval"] = True
+    if repo and str(repo).strip():
+        payload["repo"] = str(repo).strip()[:200]
     turn = _request_ctx.get_turn_id() or ""
     chat = _request_ctx.get_chat_id() or ""
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
@@ -169,17 +171,40 @@ def _repository() -> dict:
                         "and the GitHub tools do not apply to it. The factory plans and builds changes on it and "
                         "leaves each result as a reviewed local branch.",
                 "branch_prefix": values.get("FACTORY_BRANCH_PREFIX")}
-    wanted = (values.get("FACTORY_REPO") or "").lower()
+    entries = _entries(values)
     cid = values.get("FACTORY_GITHUB_CONNECTION") or "github"
     try:
         conn = config.active(_hub_dir(), cid)
     except Exception:  # noqa: BLE001
-        return {"repository": wanted, "refused": f"The GitHub connection {cid} is not set up. Run checks in Setup."}
-    match = next((r for r in conn.settings.repositories or [] if r.full_name.lower() == wanted), None)
-    if match is None:
-        return {"repository": wanted, "refused": f"{wanted} is not one of the {cid} connection's repositories."}
-    return {"repository": match.full_name, "repository_id": int(match.id), "connection": cid,
-            "label": values.get("FACTORY_LABEL"), "branch_prefix": values.get("FACTORY_BRANCH_PREFIX")}
+        return {"repositories": [e[0] for e in entries],
+                "refused": f"The GitHub connection {cid} is not set up. Run checks in Setup."}
+    out = []
+    for name, base in entries:
+        match = next((r for r in conn.settings.repositories or [] if r.full_name.lower() == name.lower()), None)
+        if match is None:
+            out.append({"repository": name, "refused": f"{name} is not one of the {cid} connection's repositories."})
+        else:
+            out.append({"repository": match.full_name, "repository_id": int(match.id),
+                        "short_name": match.full_name.split("/", 1)[1].lower(),
+                        "base_branch": base or "the repository's GitHub default branch"})
+    common = {"connection": cid, "label": values.get("FACTORY_LABEL"),
+              "branch_prefix": values.get("FACTORY_BRANCH_PREFIX")}
+    if len(out) == 1:
+        return {**out[0], **common}
+    return {"repositories": out, **common,
+            "note": "Several repositories. Pass repo (a short name or owner/name) to start_factory_work, and use "
+                    "the matching repository_id with the GitHub read tools."}
+
+
+def _entries(values: dict) -> list[tuple[str, str | None]]:
+    """FACTORY_REPO, or each FACTORY_REPOS entry, as (owner/name, base branch or None)."""
+    raw = [values.get("FACTORY_REPO")] if values.get("FACTORY_REPO") else list(values.get("FACTORY_REPOS") or [])
+    out = []
+    for item in raw:
+        name, _, base = str(item or "").strip().partition("@")
+        if name:
+            out.append((name, base or None))
+    return out
 
 
 @function_tool(strict_mode=False)
@@ -193,7 +218,7 @@ async def factory_repository() -> str:
 @function_tool(strict_mode=False)
 async def start_factory_work(request: str, issue_number: int | None = None, route: str = "auto",
                              from_work_item: str | None = None, show_plan_first: bool = False,
-                             clickup_task: str | None = None) -> str:
+                             clickup_task: str | None = None, repo: str | None = None) -> str:
     """Hand engineering work to the Software Factory as the person asking. It classifies, plans, implements in
     an isolated sandbox, gets an independent review and opens a draft pull request (it never merges). When the
     repository is a folder on this computer (factory_repository says mode: local), the result is a reviewed local
@@ -211,12 +236,14 @@ async def start_factory_work(request: str, issue_number: int | None = None, rout
         from_work_item: To implement a plan an earlier factory request produced, that work item's id.
         show_plan_first: True when they want to see and approve the plan before anything is built, even if the
             hub does not require plan approval.
+        repo: Which repository, when the factory works on several (factory_repository lists them): a short name
+            such as api, or owner/name. Leave it out when there is only one.
     """
     from hubzoid.access import current_identity
 
     surface = "mcp" if getattr(current_identity(), "surface", "") == "mcp" else "chat"
     out = await asyncio.to_thread(_start, request, issue_number, route, from_work_item, surface,
-                                  show_plan_first, clickup_task)
+                                  show_plan_first, clickup_task, repo)
     return json.dumps(out)
 
 

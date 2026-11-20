@@ -56,9 +56,14 @@ def test_each_bad_value_is_refused_with_its_key(key, value):
     assert all(p.message for p in found)
 
 
-def test_repository_is_required():
-    found = problems({})
-    assert any(p.key == "FACTORY_REPO" for p in found)
+def test_a_repository_with_its_base_branch_is_accepted():
+    assert not problems({**GOOD, "FACTORY_REPO": "example-co/widget@release/2.0"})
+    assert any(p.key == "FACTORY_REPO" for p in problems({**GOOD, "FACTORY_REPO": "example-co/widget@has space"}))
+
+
+def test_several_repositories_are_a_list():
+    assert not problems({**{k: v for k, v in GOOD.items() if k != "FACTORY_REPO"},
+                         "FACTORY_REPOS": ["example-co/api@dev", "example-co/web"]})
 
 
 def test_unknown_keys_are_refused_and_clickup_is_known():

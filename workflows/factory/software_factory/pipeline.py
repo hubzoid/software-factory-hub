@@ -127,18 +127,33 @@ def _failed(r: Run, exc: Exception) -> None:
 
 
 SNAPSHOT = {"FACTORY_REQUIRE_PLAN_APPROVAL": True, "FACTORY_REVIEW_CYCLES": 2, "FACTORY_CI_ATTEMPTS": 2,
+            "FACTORY_DESK_ATTEMPTS": 2,
             "FACTORY_CI_BEFORE_PR": False, "FACTORY_CI_WAIT_MINUTES": 30, "FACTORY_CLICKUP_CONNECTION": "",
             "FACTORY_BRANCH_PREFIX": "factory/", "FACTORY_INTAKE_ENABLED": True,
-            "FACTORY_CHANNELS": ["chat", "mcp", "github"], "FACTORY_REPO": "", "FACTORY_BUILDS": "auto",
+            "FACTORY_CHANNELS": ["chat", "mcp", "github"], "FACTORY_REPO": "", "FACTORY_REPOS": [],
+            "FACTORY_BUILDS": "auto",
             "FACTORY_LOCAL_SETUP": "", "FACTORY_SANDBOX_PROFILE": "factory", "FACTORY_PLAN_FORMAT": "markdown"}
 
 
 def _settings_now() -> dict:
-    out = {k: hub.setting(k, default) for k, default in SNAPSHOT.items()}
-    out["FACTORY_CHANNELS"] = list(out["FACTORY_CHANNELS"] or [])
-    out["FACTORY_REVIEW_CYCLES"] = max(0, min(2, int(out["FACTORY_REVIEW_CYCLES"])))
-    out["FACTORY_CI_ATTEMPTS"] = max(0, min(2, int(out["FACTORY_CI_ATTEMPTS"])))
-    out["FACTORY_BRANCH_PREFIX"] = out["FACTORY_BRANCH_PREFIX"] or "factory/"
+    return _normalized({k: hub.setting(k, default) for k, default in SNAPSHOT.items()})
+
+
+#: Settings added after work could already be saved. An older snapshot gets
+#: their defaults; other missing keys keep their meaning (FACTORY_BUILDS
+#: absent means the Docker-only factory that saved it).
+ADDED_LATER = {"FACTORY_REPOS": [], "FACTORY_DESK_ATTEMPTS": 2}
+
+
+def _normalized(out: dict) -> dict:
+    out = {**out}
+    for key, default in ADDED_LATER.items():
+        out.setdefault(key, list(default) if isinstance(default, list) else default)
+    out["FACTORY_CHANNELS"] = list(out.get("FACTORY_CHANNELS") or [])
+    out["FACTORY_REPOS"] = [str(x) for x in out["FACTORY_REPOS"] or []]
+    for key in ("FACTORY_REVIEW_CYCLES", "FACTORY_CI_ATTEMPTS", "FACTORY_DESK_ATTEMPTS"):
+        out[key] = max(0, min(2, int(out.get(key, SNAPSHOT[key]))))
+    out["FACTORY_BRANCH_PREFIX"] = out.get("FACTORY_BRANCH_PREFIX") or "factory/"
     return out
 
 
@@ -162,7 +177,7 @@ def _scope(r: Run) -> None:
     base = item.checkpoint(routes.SCOPE, lambda: {"settings": _settings_now(),
                                                   "fixed": scope.fixed_route(item.route, r.request),
                                                   "ceiling": item.route})
-    r.settings = base["settings"]
+    r.settings = _normalized(base["settings"])
     if not r.settings["FACTORY_INTAKE_ENABLED"]:
         raise FactoryStop("intake_paused", "Intake is paused, so the factory is not starting new work.")
     name = intake.channel_setting(r.request)
@@ -208,6 +223,71 @@ def _local_scope(r: Run) -> None:
                           "Ask for a plan or a change.")
 
 
+# -- which repository ------------------------------------------------------------------------
+
+def _target(r: Run):
+    """The one repository this work item is for (a `repos.Entry`), or None in
+    local folder mode. With one repository configured it is always that one
+    and nothing new is saved, so work started before several repositories
+    existed replays as it did. With several, the request must name exactly
+    one: the GitHub event's own repository, the ClickUp task's repository tag,
+    or the `repo` a chat, MCP or API caller passed. Otherwise the requester is
+    asked, never guessed for."""
+    from . import repos
+
+    if local.is_local(r.settings.get("FACTORY_REPO")):
+        return None
+    try:
+        listed = repos.entries(r.settings)
+    except repos.RepoSettingError as exc:
+        raise FactoryStop("repository_unavailable", str(exc)) from None
+    if not listed:
+        raise FactoryStop("repository_unavailable", "Set FACTORY_REPO, or FACTORY_REPOS for several repositories.")
+    if len(listed) == 1:
+        return listed[0]
+    req = r.request
+    if req.subject.repository_id:
+        name = github.listed(req.subject.repository_id)
+        found = repos.find(name, listed) if name else None
+        if found is None:
+            raise FactoryStop("repository_unavailable", f"{req.subject.full_name or 'This repository'} is not one "
+                              "of the factory's repositories (FACTORY_REPOS).")
+        return found
+    names = ", ".join(e.short for e in listed)
+    if req.repo:
+        found = repos.find(req.repo, listed)
+        if found is None:
+            raise FactoryStop("repository_unavailable", f"{req.repo} is not one of the factory's repositories: "
+                              f"{names}.")
+        return found
+    clickup = req.subject.kind == "clickup_task"
+    if clickup:
+        tags = req.data.get("clickup_tags")
+        if tags is None:
+            tags = hub.work_item.checkpoint(routes.GROUND, lambda: _clickup_task(r, req.subject.identifier)["tags"])
+        got = repos.matching(tags, listed)
+        if len(got) == 1:
+            return got[0]
+    if not r.attended:
+        how = (f"Add exactly one repository tag ({names}) to the task and move it to the trigger status again."
+               if clickup else f"Start it again and say which repository: {names}.")
+        raise FactoryStop("repository_unclear", "The factory works on several repositories and this request does "
+                          f"not say which one. {how}")
+    question = (f"Which repository should this work on? Reply with one of: {names}."
+                + (" You can also add that repository's tag to the task, then reply here." if clickup else ""))
+    progress.reply(question, key="repository:1", kind="question")
+    answer = hub.ask(question, approvers=[r.requester],
+                     options=[e.short for e in listed] if len(listed) <= 3 else None)
+    got = repos.from_answer(answer, listed)
+    if len(got) != 1 and clickup:
+        tags = hub.work_item.checkpoint(routes.GROUND, lambda: _clickup_task(r, req.subject.identifier)["tags"])
+        got = repos.matching(tags, listed)
+    if len(got) != 1:
+        raise FactoryStop("repository_unclear", f"The reply did not name exactly one repository ({names}). Start "
+                          "the work again and name one.")
+    return got[0]
+
+
 # -- grounding ------------------------------------------------------------------------------
 
 def _drain(r: Run) -> None:
@@ -227,9 +307,10 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
     the issue or pull request with its comments, the label vocabulary and
     candidate duplicates. Everything read is data."""
     req = r.request
+    entry = _target(r)
 
     def read() -> dict:
-        repo = github.repo()
+        repo = github.repo(entry)
         out: dict = {"repo": repo.__dict__, "labels": [], "duplicates": [], "subject_text": None}
         number = req.subject.number
         if repo.local_path:
@@ -285,12 +366,18 @@ def _ground(r: Run, *, pr_context: bool = False) -> None:
             prior_item = _approved_retry(r.requester, repo.full_name, number)
         if prior_item:
             out["prior"] = _prior_plan(prior_item, r.requester, repo.full_name, out.get("subject"))
+            if out["prior"]:
+                # The plan was made, and maybe approved, against this branch and
+                # its commit: they stay together even if the setting changed. A
+                # plan saved before base branches existed was made on the
+                # repository's default branch.
+                out["repo"]["base_branch"] = out["prior"].get("base_branch") or repo.default_branch
         return out
 
     r.ground.update(hub.work_item.checkpoint(routes.GROUND, read))
-    r.repo = github.Repo(**r.ground["repo"])
-    r.record.update(repository=r.repo.full_name, subject=r.ground.get("subject"),
-                    context_revision=r.ground["context_revision"])
+    r.repo = github.bind(github.Repo(**r.ground["repo"]))
+    r.record.update(repository=r.repo.full_name, repository_id=r.repo.repository_id, base_branch=r.repo.base,
+                    subject=r.ground.get("subject"), context_revision=r.ground["context_revision"])
     progress.record(context_revision=r.ground["context_revision"])
     _drain(r)
 
@@ -324,7 +411,8 @@ def _clickup_task(r: Run, task_id: str | None) -> dict:
         "status": (task.get("status") or {}).get("status"), "tags": [t.get("name") for t in task.get("tags") or []],
         "description": task.get("markdown_description") or task.get("text_content") or task.get("description")})
     return {"text": text, "title": (task.get("name") or "")[:300] or None,
-            "url": task.get("url") or f"https://app.clickup.com/t/{task.get('id') or task_id}"}
+            "url": task.get("url") or f"https://app.clickup.com/t/{task.get('id') or task_id}",
+            "tags": [t.get("name") for t in task.get("tags") or [] if t.get("name")][:20]}
 
 
 def _plan_title(r: Run, version: int | None) -> str:
@@ -362,7 +450,7 @@ def _prior_plan(item_id: str, requester: str, full_name: str, subject: dict | No
     analysis = dict(result["analysis"])
     analysis["handoff_id"] = carry_handoff(item_id, analysis.get("handoff_id"))
     return {"work_item": item_id, "classification": result.get("classification"), "analysis": analysis,
-            "base_sha": result.get("base_sha"),
+            "base_sha": result.get("base_sha"), "base_branch": result.get("base_branch"),
             # Its approval carries over only when it stopped before a pull request.
             "approved": None if result.get("pr_number") else result.get("plan_approved")}
 
@@ -519,7 +607,7 @@ def _analyze(r: Run, c: Classification, research: Research | None, *, revision: 
     else:
         a, call = stations.call("analyst", stations.analyst_message(
             r.request, r.ground, c, research, r.ground.get("brain") or "", notes=notes), stage=routes.ANALYZE,
-            revision=revision, checkout={"url": r.repo.clone_url, "ref": r.repo.default_branch},
+            revision=revision, checkout={"url": r.repo.clone_url, "ref": r.repo.base},
             **_where(r, routes.ANALYZE))
         r.record["base_sha"] = stations.checkout_commit(call) or r.record.get("base_sha")
     r.record["analysis"] = a.model_dump()
@@ -600,7 +688,7 @@ def _plan_document(r: Run, c: Classification, a: Analysis, research: Research | 
     text = evidence.plan_markdown(title=r.ground.get("subject", {}).get("title") or c.summary,
                                   request=r.request.instruction, analysis=a,
                                   research_summary=research.summary if research else None,
-                                  repository=r.repo.full_name, base_branch=r.repo.default_branch,
+                                  repository=r.repo.full_name, base_branch=r.repo.base,
                                   base_sha=r.record.get("base_sha"))
     digest = evidence.digest(text)
     r.record["plan_digest"] = digest
@@ -802,7 +890,7 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
             checkout = {"url": r.repo.clone_url, "ref": branch}
         else:
             # Built on the exact commit the plan was made (and approved) against.
-            checkout = {"url": r.repo.clone_url, "ref": r.repo.default_branch}
+            checkout = {"url": r.repo.clone_url, "ref": r.repo.base}
             if r.record.get("base_sha"):
                 checkout["commit"] = r.record["base_sha"]
         impl, call = stations.call("implementer", stations.implementer_message(
@@ -811,6 +899,18 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
             previous=previous, ci_context=ci_context), stage=routes.IMPLEMENT, revision=revision,
             checkout=checkout, **_where(r, routes.IMPLEMENT))
         r.record["implementation"] = impl.model_dump()
+        if not impl.committed and pr_number is not None and _desk_repair(ci_context) and impl.deviations \
+                and head == expected_head:                  # nothing pushed in this repair yet
+            # The implementer judged the Desk's findings not to need a change.
+            # It says why on the pull request and leaves the open gate to a
+            # person: no empty commit, and no claim that the Desk is green.
+            reasons = [x for x in impl.deviations if x]
+            raise FactoryStop("desk_findings_disputed", "The factory made no change for Engineering Desk's findings "
+                              f"on `{(head or '')[:12]}`, because:\n"
+                              + "\n".join(f"- {x}" for x in reasons[:10])
+                              + "\n\nA person decides from here. Someone other than the pull request's author can "
+                              "dismiss a finding with `/hubzoid dismiss` on the Desk's comment, or ask the factory "
+                              "for a change.", details={"implementation": impl.model_dump(), "pushed_branch": branch})
         if not impl.committed:
             raise FactoryStop("implementation_not_pushed", "The implementer did not finish: "
                               + "; ".join(impl.known_limitations or ["no reason given"]),
@@ -885,6 +985,10 @@ def _build_and_review(r: Run, c: Classification, a: Analysis, *, branch: str, ex
     raise FactoryStop("review_unresolved", "The review still requests changes after the allowed revisions.",
                       details={"findings": r.record.get("review", {}).get("blocking_findings"),
                                "pushed_branch": branch})
+
+
+def _desk_repair(ci_context) -> bool:
+    return any((j or {}).get("kind") == "status" for j in (ci_context or {}).get("jobs") or [])
 
 
 def _ci_before_pr(r: Run, head: str, pr_number: int | None) -> dict | None:
@@ -994,7 +1098,7 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
         try:
             out = github.write("createPullRequest", caller=r.caller, route=r.route, intake=r.intake_number,
                                requester=r.requester, repository_id=r.repo.repository_id, title=title[:200],
-                               body=body, base=r.repo.default_branch, head=branch, draft=True,
+                               body=body, base=r.repo.base, head=branch, draft=True,
                                head_sha=pushed_sha)["data"]
         except OperationFailed as exc:
             if exc.code == "operation_rejected":
@@ -1003,7 +1107,7 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
             raise
         if not (isinstance(out, dict) and out.get("number") and out.get("html_url")):
             # A person settled an uncertain creation as done: find the real one.
-            out = hub.work_item.checkpoint(routes.DELIVER, lambda: github.find_pull_request(branch) or {})
+            out = hub.work_item.checkpoint(routes.DELIVER, lambda: github.find_pull_request(branch, r.repo.repository_id) or {})
             head = ((out.get("head") or {}).get("sha") or "") if out else ""
             if not out.get("number") or not head.startswith(pushed_sha[:12]):
                 raise FactoryStop("pull_request_unconfirmed", "No draft pull request for the reviewed commit could be "
@@ -1030,9 +1134,10 @@ def _deliver(r: Run, c: Classification, a: Analysis, impl: Implementation, revie
                 f"{a.problem_statement.strip()} The change is on {branch} at `{pushed_sha[:12]}`. {passing} "
                 f"Check before marking it ready: {look}.")
     else:
-        attempt = r.record.get("ci_attempt")
-        why = (f"CI fix attempt {attempt} of {r.settings['FACTORY_CI_ATTEMPTS']}" if attempt
-               else "The change you asked for")
+        attempt, desk = r.record.get("ci_attempt"), r.record.get("desk_attempt")
+        parts = ([f"CI fix attempt {attempt} of {r.settings['FACTORY_CI_ATTEMPTS']}"] if attempt else []) + (
+            [f"Engineering Desk fix attempt {desk} of {r.settings['FACTORY_DESK_ATTEMPTS']}"] if desk else [])
+        why = " and ".join(parts) or "The change you asked for"
         text = (f"{why} is pushed to pull request #{pr_number}" + (f": {pr_url}" if pr_url else ".") + "\n\n"
                 f"The branch {branch} is now at `{pushed_sha[:12]}`. {passing} Check before it merges: {look}.")
     return _done(r, "review_ready", text + (f"\n\nEvidence: {ev_url}" if ev_url else "") + note,
@@ -1131,10 +1236,12 @@ def _act(r: Run) -> dict:
     github.pr_update write mode)."""
     act = scope.ActRequest.model_validate((r.record.get("scope") or {}).get("act") or {})
 
-    def where() -> dict:
-        return github.repo().__dict__
+    entry = _target(r)
 
-    r.repo = github.Repo(**hub.work_item.checkpoint(routes.ACT, where))
+    def where() -> dict:
+        return github.repo(entry).__dict__
+
+    r.repo = github.bind(github.Repo(**hub.work_item.checkpoint(routes.ACT, where)))
     common = dict(caller=r.caller, route=r.route, intake=r.intake_number, requester=r.requester,
                   repository_id=r.repo.repository_id, number=act.number)
     op = act.operation
