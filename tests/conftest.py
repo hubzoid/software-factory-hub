@@ -223,11 +223,9 @@ class FakeGitHub:
         if m:
             return R(200, json=[{"filename": "calc.py", "status": "modified", "additions": 1, "deletions": 1,
                                  "changes": 2, "patch": "@@ -1 +1 @@"}] if m.group(2) == "files" else [])
-        m = re.fullmatch(rf"/repos/{FULL}/commits/([0-9a-f]+)/status", path)
+        m = re.fullmatch(rf"/repos/{FULL}/commits/([0-9a-f]+)/statuses", path)
         if m:
-            got = self.statuses.get(m.group(1), [])
-            return R(200, json={"state": "failure" if any(x["state"] == "failure" for x in got) else "success",
-                                "statuses": got})
+            return R(200, json=self.statuses.get(m.group(1), []))     # newest first, with each creator
         m = re.fullmatch(rf"/repos/{FULL}/commits/([0-9a-f]+)/pulls", path)
         if m:
             return R(200, json=[self._pr_json(n) for n in self.pulls
