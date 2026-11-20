@@ -36,7 +36,7 @@ provider_config:
     routes: {mention: request, review_mention: request, label: implement, pull_request: summarize, ci_failure: revise}
 ```
 
-With the optional `status_failures` rule for `engineering-desk/review`, Engineering Desk's failed merge gate on a factory pull request is repaired like red CI, in its own rounds (SETUP.md, step 7).
+With the optional `status_failures` rule for `engineering-desk/review` (Hubzoid 2.0.9 or later), Engineering Desk's failed merge gate on a factory pull request is repaired like red CI, in its own rounds (SETUP.md, step 7).
 
 The orientation comment has one owner. If GitZoid reviews pull requests in the same repository, turn `pr_opened` off in one of them.
 
