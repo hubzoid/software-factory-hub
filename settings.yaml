@@ -3,10 +3,13 @@ version: 1
 # Check them with `hubzoid hub configure . --check` and see them with `hubzoid hub settings .`.
 settings:
   - name: FACTORY_REPO
-    description: The repository the factory works on. Either owner/name on GitHub, one of the repositories of the GitHub connection, or the path of a Git folder on this computer (starting with / or ~/), which needs no GitHub and ends in a reviewed local branch.
-    required: true
-    regex: '^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}|~?/.+)$'
+    description: The repository the factory works on. Either owner/name on GitHub, one of the repositories of the GitHub connection, or the path of a Git folder on this computer (starting with / or ~/), which needs no GitHub and ends in a reviewed local branch. Add @branch (owner/name@dev) to build on, and open pull requests into, that branch instead of the repository's GitHub default branch. Set this or FACTORY_REPOS, not both.
+    regex: '^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}(?:@[^\s@]{1,200})?|~?/.+)$'
     example: example-org/factory-sample
+  - name: FACTORY_REPOS
+    type: string_list
+    description: Several repositories for one factory, each owner/name or owner/name@branch, up to 50. Leave FACTORY_REPO empty when you use this. A work item uses exactly one of them; with several, a ClickUp task names it with a tag equal to the repository's short name (or owner/name), and chat names it. Short names must be unique.
+    example: [example-org/api@dev, example-org/web]
   - name: FACTORY_LABEL
     description: The issue label that hands an issue to the factory. Adding it starts unattended work that ends in a draft pull request.
     default: factory
@@ -70,6 +73,12 @@ settings:
     maximum: 2
   - name: FACTORY_CI_ATTEMPTS
     description: How many CI repair attempts the factory makes on a branch it owns before handing over to a person (0 to 2).
+    type: integer
+    default: 2
+    minimum: 0
+    maximum: 2
+  - name: FACTORY_DESK_ATTEMPTS
+    description: How many times the factory fixes Engineering Desk's blocking findings on one of its pull requests before handing over to a person (0 to 2). Counted apart from CI repair attempts. Needs the GitHub channel's status_failures rule (SETUP.md).
     type: integer
     default: 2
     minimum: 0

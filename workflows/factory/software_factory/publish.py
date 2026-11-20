@@ -150,7 +150,7 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
                               f"pushed at {expected_head[:12]}. Nothing was published.")
     try:
         out = github.push(repository_id=repo.repository_id, branch=branch, patch=data, patch_sha256=digest,
-                          base_sha=base_sha, expected_head=expected_head, base_branch=repo.default_branch,
+                          base_sha=base_sha, expected_head=expected_head, base_branch=repo.base,
                           key=key)
     except Exception as exc:  # noqa: BLE001 - the SDK's codes become the factory's stop reasons
         code = getattr(exc, "code", None)
@@ -163,7 +163,7 @@ def publish_branch(*, repo: github.Repo, call_id: str, branch: str, revision: in
     latest = ledger_get(repo.repository_id, branch) or {}
     ledger_put(repo.repository_id, branch, dict(latest, owner_item=latest.get("owner_item") or owner_item,
                                                 branch=branch, repository_id=repo.repository_id,
-                                                base_branch=repo.default_branch, pushed_sha=out["head_sha"],
+                                                base_branch=repo.base, pushed_sha=out["head_sha"],
                                                 last_item=hub.work_item.id))
     return Published(branch=branch, pushed_sha=out["head_sha"], previous_head=out.get("previous_head"),
                      base_sha=out.get("base_sha") or base_sha, commits=out.get("commits") or checked.commits,
@@ -191,7 +191,7 @@ def _publish_local(repo: github.Repo, *, branch: str, data: bytes, base_sha: str
     imports[key] = head
     ledger_put(repo.repository_id, branch, dict(entry, owner_item=entry.get("owner_item") or owner_item,
                                                 branch=branch, repository_id=repo.repository_id,
-                                                local_path=repo.local_path, base_branch=repo.default_branch,
+                                                local_path=repo.local_path, base_branch=repo.base,
                                                 pushed_sha=head, imports=imports,
                                                 last_item=hub.work_item.id))
     return Published(branch=branch, pushed_sha=head, previous_head=expected_head, base_sha=base_sha,

@@ -173,14 +173,19 @@ def main(argv=None) -> int:
             from hubzoid.hub_changes import service
             from hubzoid.hubs import settings
 
-            configured = settings.effective(hub).get("FACTORY_REPO", "")
+            values = settings.effective(hub)
+            configured = values.get("FACTORY_REPO", "")
             if local.is_local(args.repository) or local.is_local(configured):
                 same = (local.is_local(args.repository) and local.is_local(configured)
                         and local.folder(configured) == local.folder(args.repository))
             else:
-                same = configured.lower() == args.repository.lower()
+                from software_factory import repos
+
+                same = repos.find(args.repository.split("@", 1)[0], repos.entries(values)) is not None \
+                    and "/" in args.repository
             if not same:
-                raise ValueError("The brief must match FACTORY_REPO. Configure the intended repository first.")
+                raise ValueError("The brief must match FACTORY_REPO or one of FACTORY_REPOS. Configure the intended "
+                                 "repository first.")
             migrations.upgrade(db.operational_engine(hub), "operational")
             actor = auth.local_owner(hub).email
             name = repository_name(args.repository, hub)

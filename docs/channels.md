@@ -36,6 +36,8 @@ provider_config:
     routes: {mention: request, review_mention: request, label: implement, pull_request: summarize, ci_failure: revise}
 ```
 
+With the optional `status_failures` rule for `engineering-desk/review`, Engineering Desk's failed merge gate on a factory pull request is repaired like red CI, in its own rounds (SETUP.md, step 7).
+
 The orientation comment has one owner. If GitZoid reviews pull requests in the same repository, turn `pr_opened` off in one of them.
 
 ## Slack and Linear
@@ -47,6 +49,8 @@ Copy `channels/slack.yaml.example` or `channels/linear.yaml.example` to `.yaml`,
 ClickUp is built for teams whose requests start with people who are not engineers. A task moved to the trigger status (for example "ready for agent") starts factory work as the person who moved it. The task's name and description reach the stations as data, never as instructions. When the factory needs decisions it asks up to three plain-language questions as a task comment, with suggested answers, and moves the task to `statuses.question`. That person's next comment ("1 a, 2 b", or their own words) answers them and the work continues. The plan is attached to the task as a file (`FACTORY_PLAN_FORMAT`: Markdown by default, or HTML) and the task moves to `statuses.approval`. With `approve_in_task: true` in the channel file, that person replies `approve`, `change:` followed by what to change, or `reject`; otherwise, or as well, they approve in their Hubzoid Inbox, which the comment links to. Filter the board by the question and approval statuses to see everything waiting on people. The draft pull request is linked on the task (and the task in the pull request), its branch is named `factory/CU-<task id>-…`, and the task moves to `statuses.result`.
 
 Copy `channels/clickup.yaml.example` to `channels/clickup.yaml`, put in your workspace and list ids, apply it, store the token, run `hubzoid channels clickup setup . clickup`, link each person (`hubzoid channels clickup members . clickup` lists their ClickUp ids), set `FACTORY_CLICKUP_CONNECTION: clickup` and add `clickup` to `FACTORY_CHANNELS`. The SDK page `docs/channels/clickup.md` covers the token, the webhooks and the statuses. With the connection set, a chat request can also name a task ("fix https://app.clickup.com/t/86abc"): the factory reads it through the same connection. Moving the task after the pull request merges is left to people or ClickUp's own GitHub integration.
+
+With several repositories (`FACTORY_REPOS`), give each task one tag equal to its repository's short name (`api`) or `owner/name`. A task with none, or with two, gets the question "Which repository?" as a task comment, and the person's reply (the repository's name) continues it. ClickUp sends the factory a task's first 20 tags.
 
 ## Follow-ups and stopping
 

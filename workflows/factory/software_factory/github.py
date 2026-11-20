@@ -8,6 +8,7 @@ asks the requester first when the matrix says so. The hub never holds a token.
 """
 from __future__ import annotations
 
+import contextvars
 from dataclasses import dataclass
 
 from hubzoid import hub
@@ -41,6 +42,29 @@ class Repo:
     clone_url: str
     #: set in local repository mode: the folder, and clone_url is the same path
     local_path: str | None = None
+    #: the branch this work builds on and opens its pull request into. Work
+    #: saved before base branches existed has none, and used the default branch.
+    base_branch: str | None = None
+
+    @property
+    def base(self) -> str:
+        return self.base_branch or self.default_branch
+
+
+#: The one repository this work item may write to. Set once the work item's
+#: target is known (grounding, CI admission, an action), and checked by every
+#: write and push. Nothing set means nothing is written.
+_TARGET: contextvars.ContextVar[Repo | None] = contextvars.ContextVar("factory_target", default=None)
+
+
+def bind(repo: Repo) -> Repo:
+    """Make `repo` this work item's only writable repository, and return it."""
+    _TARGET.set(repo)
+    return repo
+
+
+def bound() -> Repo | None:
+    return _TARGET.get()
 
 
 def connection():
@@ -60,44 +84,80 @@ def _hub_dir():
     return context._ctx().hub_dir
 
 
-def configured_repository_id() -> int:
-    """FACTORY_REPO's numeric id in the connection. Work from chat, the API,
-    Slack or Linear has no GitHub coordinates, so the SDK would accept any
-    repository of the connection: the factory itself allows only this one."""
+def listed(repository_id) -> str | None:
+    """The configured entry's name for this repository id, or None when the
+    factory does not work on it."""
+    from . import repos
+
     conn = connection()
-    wanted = (hub.setting("FACTORY_REPO") or "").lower()
-    match = next((r for r in conn.settings.repositories or [] if r.full_name.lower() == wanted), None)
-    if match is None:
-        raise FactoryRefused("repository_unavailable", f"{wanted or 'FACTORY_REPO'} is not one of the connection's "
-                             "repositories.")
-    return int(match.id)
+    names = {e.full_name.lower() for e in repos.entries(_settings())}
+    match = next((r for r in conn.settings.repositories or []
+                  if int(r.id) == int(repository_id) and r.full_name.lower() in names), None)
+    return match.full_name if match else None
+
+
+def entry_for(repository_id):
+    """The configured entry (with its base branch) for this repository id."""
+    from . import repos
+
+    name = listed(repository_id)
+    return next((e for e in repos.entries(_settings()) if e.full_name.lower() == (name or "").lower()), None)
+
+
+def _settings() -> dict:
+    return {"FACTORY_REPO": hub.setting("FACTORY_REPO") or "", "FACTORY_REPOS": hub.setting("FACTORY_REPOS") or []}
+
+
+def _only_listed(repository_id) -> None:
+    """Reads stay inside the factory's own repositories."""
+    if listed(repository_id) is None:
+        raise FactoryRefused("repository_unavailable", "That repository is not one of the factory's repositories.")
 
 
 def _only_factory_repo(repository_id) -> None:
-    if repository_id != configured_repository_id():
-        raise FactoryRefused("repository_unavailable", "The factory writes only to FACTORY_REPO.")
+    target = bound()
+    if target is None or target.local_path or int(repository_id or 0) != int(target.repository_id):
+        raise FactoryRefused("repository_unavailable", "The factory writes only to the repository this work is "
+                             "for.")
 
 
-def repo() -> Repo:
-    """The configured repository, looked up through the connection by name,
-    then always used by its numeric id. A folder path is local repository
-    mode: no connection, the folder's current branch is the base."""
+def repo(entry=None) -> Repo:
+    """A configured repository, looked up through the connection by name,
+    then always used by its numeric id, with its base branch: the entry's
+    `@branch`, else the repository's GitHub default. `entry` is a
+    `repos.Entry`; with one repository configured it may be left out. A
+    folder path is local repository mode: no connection, the folder's
+    current branch is the base."""
     from hubzoid.channels.github import client as gh
 
-    from . import local
+    from . import local, repos
 
     if local.is_local(hub.setting("FACTORY_REPO")):
         return local.repo(hub.setting("FACTORY_REPO"), hub_dir=_hub_dir())
+    if entry is None:
+        try:
+            listed_ = repos.entries(_settings())
+        except repos.RepoSettingError as exc:
+            raise FactoryRefused("repository_unavailable", str(exc)) from None
+        if len(listed_) != 1:
+            raise FactoryRefused("repository_unavailable", "Several repositories are configured: say which one.")
+        entry = listed_[0]
     conn = connection()
-    wanted = (hub.setting("FACTORY_REPO") or "").lower()
+    wanted = entry.full_name.lower()
     match = next((r for r in conn.settings.repositories or [] if r.full_name.lower() == wanted), None)
     if match is None:
-        raise FactoryRefused("repository_unavailable", f"{wanted or 'FACTORY_REPO'} is not one of the "
-                             "connection's repositories. Check the spelling and the App installation. The factory "
-                             "never switches repositories on its own.")
+        raise FactoryRefused("repository_unavailable", f"{wanted} is not one of the connection's repositories. "
+                             "Check the spelling and the App installation. The factory never switches "
+                             "repositories on its own.")
     info = read("getRepository", repository_id=match.id)["data"]
+    default = info.get("default_branch") or "main"
+    base = entry.base_branch or default
+    if entry.base_branch and branch_head(int(match.id), base) is None:
+        raise FactoryRefused("base_branch_missing", f"The branch {base} does not exist in "
+                             f"{info.get('full_name') or match.full_name}. Fix the @{base} part of FACTORY_REPO or "
+                             "FACTORY_REPOS, or create the branch.")
     return Repo(connection=conn.id, repository_id=match.id, full_name=info.get("full_name") or match.full_name,
-                default_branch=info.get("default_branch") or "main",
+                default_branch=default, base_branch=base,
                 clone_url=f"{gh.web_url()}/{info.get('full_name') or match.full_name}.git")
 
 
@@ -150,13 +210,14 @@ def push(*, repository_id: int, branch: str, patch: bytes, patch_sha256: str, ba
                                   base_branch=base_branch, key=key)
 
 
-def find_pull_request(branch: str) -> dict | None:
-    """The pull request whose head is `branch` in FACTORY_REPO, if any."""
+def find_pull_request(branch: str, repository_id: int) -> dict | None:
+    """The pull request whose head is `branch` in this work's repository, if any."""
     from hubzoid.channels.github import client as gh
     from hubzoid.channels.github import operations
 
+    _only_listed(repository_id)
     conn = connection()
-    rid = configured_repository_id()
+    rid = int(repository_id)
     web = gh.for_repo(conn, rid, gh.READ)
     found = operations.find_pull_request(conn, web, gh.current_name(conn, web, rid), branch)
     return {k: found.get(k) for k in ("number", "html_url", "draft", "head")} if found else None
@@ -196,7 +257,7 @@ def pull_request_state(repository_id: int, number: int) -> dict:
     """
     from hubzoid.channels.github import client as gh
 
-    _only_factory_repo(repository_id)
+    _only_listed(repository_id)
     conn = connection()
     web = gh.for_repo(conn, repository_id, gh.READ)
     full = gh.current_name(conn, web, repository_id)

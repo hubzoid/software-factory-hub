@@ -235,6 +235,8 @@ def test_chat_learns_the_repository_id_in_one_call(factory):
     tools = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tools)
     assert tools._repository() == {"repository": h.FULL, "repository_id": h.REPO_ID, "connection": "github",
+                                   "short_name": "widget",
+                                   "base_branch": "the repository's GitHub default branch",
                                    "label": "factory", "branch_prefix": "factory/"}
 
 
