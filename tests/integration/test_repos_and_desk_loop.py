@@ -189,6 +189,10 @@ def red_ci(factory, rec, *, delivery="ci-1", suite=5):
 
 
 def desk_loop(factory):
+    from hubzoid.channels.github import adapter
+
+    if not hasattr(adapter, "StatusFailure"):
+        pytest.skip("needs a Hubzoid whose GitHub channel has rules.status_failures (hubzoid/hubzoid#147)")
     h.reapply_github(factory.hub_dir, status_failures=[DESK])
 
 

@@ -447,10 +447,11 @@ def github_channel(*, repositories=None, status_failures=None) -> dict:
                                "bot_name": "acme-factory",
                                "rules": {"mentions": True, "label": "factory", "pr_opened": True,
                                          "ci_failure": True,
-                                         "status_failures": status_failures or [],
                                          "routes": {"mention": "request", "review_mention": "request",
                                                     "label": "implement", "pull_request": "summarize",
                                                     "ci_failure": "revise"}}}}
+    if status_failures:      # only when used: a released Hubzoid without the rule refuses the key
+        cfg["provider_config"]["rules"]["status_failures"] = status_failures
     return cfg
 
 
