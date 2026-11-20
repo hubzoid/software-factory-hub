@@ -161,7 +161,7 @@ Grant the teammate access to this hub and `wf_factory` using the SDK's existing 
 
 ## 7. Optional: fix Engineering Desk findings on the factory's pull requests
 
-When Engineering Desk reviews the same repositories with its merge gate on, the factory can fix the Desk's blocking findings on its own draft pull request, the way it fixes red CI. The Desk reports through its `engineering-desk/review` commit status. Nothing here gives the factory a Desk key.
+When Engineering Desk reviews the same repositories with its merge gate on, the factory can fix the Desk's blocking findings on its own draft pull request, the way it fixes red CI. The Desk reports through its `engineering-desk/review` commit status. Nothing here gives the factory a Desk key. It needs Hubzoid 2.0.9 or later: older versions refuse the `status_failures` rule with "not a github setting". Upgrade with `python -m pip install "hubzoid[sandbox]>=2.0.9,<3"`.
 
 1. In the Engineering Desk hub, for each repository the factory works on: `status_check: gate`, `skip_drafts: false` (the factory opens drafts), and the factory's GitHub App bot in `review_bots`.
 2. In this hub's `channels/github.yaml`, add the rule, with the login that posts the Desk's status (its App bot, or the owner of its token):
